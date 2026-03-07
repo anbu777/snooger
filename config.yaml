@@ -22,7 +22,7 @@ tools:
 ai:
   mode: "auto"
   model_smart: "llama3.2"
-  model_light: "phi3:mini"
+  model_light: "phi3"
   ollama_host: "http://localhost:11434"
 
 workspace: "workspace"
