@@ -3,9 +3,6 @@ import requests
 from core.utils import run_command, save_raw_output
 
 def quick_xss_test(url, workspace_dir):
-    """
-    Simple reflected XSS test with a few payloads.
-    """
     print(f"[Validation] Quick XSS test on {url}")
     payloads = [
         "<script>alert(1)</script>",
@@ -22,7 +19,6 @@ def quick_xss_test(url, workspace_dir):
                 if '=' in pair:
                     k, v = pair.split('=', 1)
                     params[k] = v
-
         for param in params:
             original = params[param]
             for payload in payloads:
@@ -39,22 +35,17 @@ def quick_xss_test(url, workspace_dir):
                             'evidence': f"Payload reflected in response"
                         }
                 except Exception:
-                    pass
+                    continue
     except Exception as e:
         print(f"[Validation] Quick XSS test error: {e}")
     return {'validated': False}
 
 def validate_xss_xsstrike(url, workspace_dir):
-    """
-    Use XSStrike to validate XSS.
-    """
     print(f"[Validation] Running XSStrike on {url}")
-    out_file = os.path.join(workspace_dir, 'validation', f'xsstrike_{abs(hash(url))}.json')
     cmd = f"xsstrike -u {url} --json"
     stdout, stderr, rc = run_command(cmd, timeout=180)
     save_raw_output(workspace_dir, 'validation', f'xsstrike_{abs(hash(url))}', stdout + stderr, 'txt')
-
-    if "Vulnerable" in stdout:
+    if "Vulnerable" in stdout or "XSS found" in stdout:
         return {
             'validated': True,
             'type': 'XSS',

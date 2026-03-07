@@ -5,20 +5,9 @@ import re
 from urllib.parse import urlparse
 
 class AuthManager:
-    """
-    Manages authentication for a target.
-    Supports:
-    - Form-based login
-    - Basic auth
-    - Token-based (Bearer, JWT)
-    - Session cookies
-    - Multi-step login flows
-    """
     def __init__(self, workspace_dir):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0'
-        })
+        self.session.headers.update({'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0'})
         self.base_url = None
         self.logged_in = False
         self.workspace_dir = workspace_dir
@@ -27,11 +16,9 @@ class AuthManager:
         self.session_file = os.path.join(workspace_dir, 'auth_session.pkl')
 
     def set_base_url(self, url):
-        """Set base URL for the target"""
         self.base_url = url.rstrip('/')
 
     def load_session(self):
-        """Load saved session from workspace"""
         if os.path.exists(self.session_file):
             try:
                 with open(self.session_file, 'rb') as f:
@@ -43,12 +30,10 @@ class AuthManager:
         return False
 
     def save_session(self):
-        """Save current session cookies to workspace"""
         with open(self.session_file, 'wb') as f:
             pickle.dump(self.session.cookies, f)
 
     def export_cookies_netscape(self, filepath):
-        """Export cookies to Netscape format file for tools like ffuf, nuclei, etc."""
         with open(filepath, 'w') as f:
             f.write("# Netscape HTTP Cookie File\n")
             for cookie in self.session.cookies:
@@ -62,22 +47,12 @@ class AuthManager:
                 f.write(f"{domain}\t{flag}\t{path}\t{secure}\t{expiry}\t{name}\t{value}\n")
 
     def login_form(self, login_url, username, password, username_field='username', password_field='password', extra_data=None, csrf_field=None):
-        """
-        Perform form-based login
-        Example: login_url = 'https://example.com/login'
-        """
         print(f"[Auth] Attempting form login to {login_url}")
         self.auth_type = 'form'
         self.auth_data = {'username': username, 'password': password}
-        
-        data = {
-            username_field: username,
-            password_field: password
-        }
+        data = {username_field: username, password_field: password}
         if extra_data:
             data.update(extra_data)
-        
-        # Try to extract CSRF token if needed
         if csrf_field:
             try:
                 resp = self.session.get(login_url)
@@ -88,11 +63,9 @@ class AuthManager:
                     print("[Auth] Could not find CSRF token automatically")
             except Exception as e:
                 print(f"[Auth] Error fetching CSRF: {e}")
-
         try:
             resp = self.session.post(login_url, data=data, allow_redirects=True)
             if resp.status_code == 200:
-                # Check for success indicators
                 if any(x in resp.text.lower() for x in ['logout', 'dashboard', 'profile', 'welcome']):
                     self.logged_in = True
                     print("[Auth] Login successful")
@@ -109,7 +82,6 @@ class AuthManager:
             return False
 
     def login_basic(self, username, password):
-        """HTTP Basic Authentication"""
         from requests.auth import HTTPBasicAuth
         self.auth_type = 'basic'
         self.auth_data = {'username': username, 'password': password}
@@ -119,7 +91,6 @@ class AuthManager:
         return True
 
     def set_token(self, token, header='Authorization', scheme='Bearer'):
-        """Set token (e.g., JWT)"""
         self.auth_type = 'token'
         self.auth_data = {'token': token, 'header': header, 'scheme': scheme}
         self.session.headers.update({header: f'{scheme} {token}'})
@@ -128,7 +99,6 @@ class AuthManager:
         return True
 
     def set_cookies(self, cookies_dict):
-        """Set custom cookies"""
         self.auth_type = 'cookies'
         self.auth_data = cookies_dict
         self.session.cookies.update(cookies_dict)
@@ -137,7 +107,6 @@ class AuthManager:
         return True
 
     def request(self, method, url, **kwargs):
-        """Make authenticated request"""
         if not self.base_url:
             full_url = url
         else:
@@ -157,7 +126,6 @@ class AuthManager:
         return self.logged_in
 
     def logout(self):
-        """Clear session"""
         self.session.cookies.clear()
         self.session.auth = None
         self.logged_in = False
