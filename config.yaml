@@ -1,5 +1,3 @@
-# config.yaml - Konfigurasi Snooger
-
 tools:
   subfinder: "subfinder"
   amass: "amass"
@@ -16,13 +14,13 @@ tools:
   wpscan: "wpscan"
   xsstrike: "xsstrike"
   commix: "commix"
-  testssl: "testssl.sh"
+  testssl: "testssl"
   arjun: "arjun"
   gobuster: "gobuster"
   dirsearch: "dirsearch"
 
 ai:
-  mode: "auto"  # auto, smart, light, off
+  mode: "auto"
   model_smart: "llama3.2"
   model_light: "phi3:mini"
   ollama_host: "http://localhost:11434"

@@ -28,6 +28,9 @@ from modules.exploitation.sqlmap_wrapper import run_sqlmap
 from modules.reporting.json_builder import build_final_report
 from modules.reporting.ai_summary import generate_summary
 
+from modules.auth_handler import AuthManager
+from modules.business_logic.idor import scan_idor
+
 BANNER = r"""
  ░▒▓███████▓▒░▒▓███████▓▒░ ░▒▓██████▓▒░ ░▒▓██████▓▒░ ░▒▓██████▓▒░░▒▓████████▓▒░▒▓███████▓▒░  
 ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░ 
@@ -93,6 +96,62 @@ def main():
 
     logger.info(f"Mode AI: {config['ai']['mode']}")
 
+    # ==================== AUTHENTICATION HANDLER ====================
+    auth = AuthManager(target_dir)
+    auth.set_base_url(f"https://{args.domain}")  # asumsi https
+
+    cookies_file = os.path.join(target_dir, 'cookies.txt')
+    if interactive.confirm_action("Apakah target memerlukan autentikasi?"):
+        print("\n[Auth] Pilih metode autentikasi:")
+        auth_choice = interactive.get_user_choice(
+            "Metode:",
+            ["Form-based login", "HTTP Basic Auth", "Token (Bearer/JWT)", "Cookies", "Load saved session"],
+            default=1
+        )
+        if auth_choice == "Form-based login":
+            login_url = input("Masukkan URL login (contoh: https://example.com/login): ").strip()
+            username = input("Username: ").strip()
+            password = input("Password: ").strip()
+            username_field = input("Nama field username (default: username): ").strip() or "username"
+            password_field = input("Nama field password (default: password): ").strip() or "password"
+            csrf_field = input("Nama field CSRF token (jika ada, kosongkan jika tidak): ").strip() or None
+            if auth.login_form(login_url, username, password, username_field, password_field, csrf_field=csrf_field):
+                print("[Auth] Berhasil login")
+            else:
+                print("[Auth] Gagal login, lanjut tanpa autentikasi")
+        elif auth_choice == "HTTP Basic Auth":
+            username = input("Username: ").strip()
+            password = input("Password: ").strip()
+            auth.login_basic(username, password)
+        elif auth_choice == "Token (Bearer/JWT)":
+            token = input("Token: ").strip()
+            header = input("Header name (default: Authorization): ").strip() or "Authorization"
+            scheme = input("Scheme (default: Bearer): ").strip() or "Bearer"
+            auth.set_token(token, header, scheme)
+        elif auth_choice == "Cookies":
+            print("Masukkan cookies dalam format name=value, pisahkan dengan koma (contoh: sessionid=abc, csrftoken=xyz):")
+            cookie_str = input().strip()
+            cookies = {}
+            for item in cookie_str.split(','):
+                if '=' in item:
+                    k, v = item.split('=', 1)
+                    cookies[k.strip()] = v.strip()
+            auth.set_cookies(cookies)
+        elif auth_choice == "Load saved session":
+            if auth.load_session():
+                print("[Auth] Session dimuat dari workspace")
+            else:
+                print("[Auth] Tidak ada session tersimpan")
+    else:
+        auth.load_session()  # Coba muat session jika ada
+
+    # Ekspor cookies untuk tool eksternal jika login berhasil
+    if auth.is_logged_in():
+        auth.export_cookies_netscape(cookies_file)
+        print(f"[Auth] Cookies disimpan ke {cookies_file}")
+    else:
+        cookies_file = None
+
     # ==================== FASE RECONNAISSANCE ====================
     if not args.skip_recon:
         print("\n[FASE 1] Reconnaissance dimulai...")
@@ -102,7 +161,7 @@ def main():
         max_targets = 20
         tech_targets = all_targets[:max_targets]
         tech_results = detect_technologies(tech_targets, target_dir)
-        content_results = discover_content(args.domain, target_dir)
+        content_results = discover_content(args.domain, target_dir, cookies_file=cookies_file)
         recon_summary = {
             'subdomains': subdomains,
             'alive_subdomains': alive,
@@ -122,6 +181,21 @@ def main():
         else:
             alive = []
 
+    # ==================== BUSINESS LOGIC TESTING (IDOR) ====================
+    if not args.skip_recon:  # Lakukan IDOR setelah recon jika ada autentikasi
+        if auth.is_logged_in():
+            # Kumpulkan URL dari content discovery
+            all_urls = []
+            if os.path.exists(os.path.join(target_dir, 'content_discovery.json')):
+                with open(os.path.join(target_dir, 'content_discovery.json'), 'r') as f:
+                    cd_data = json.load(f)
+                    for item in cd_data:
+                        all_urls.append(item['url'])
+            all_urls.append(f"https://{args.domain}")  # tambahkan domain utama
+            idor_findings = scan_idor(auth, all_urls, target_dir)
+        else:
+            print("[IDOR] Tidak ada autentikasi, lewati IDOR scan.")
+
     # ==================== FASE SCANNING ====================
     if not args.skip_scan:
         print("\n[FASE 2] Scanning dimulai...")
@@ -137,7 +211,7 @@ def main():
     if not args.skip_vuln:
         print("\n[FASE 3] Vulnerability Analysis dimulai...")
         vuln_targets = [args.domain] + alive
-        vuln_results = run_nuclei(vuln_targets, target_dir)
+        vuln_results = run_nuclei(vuln_targets, target_dir, cookies_file=cookies_file)
         print(f"[+] Ditemukan {len(vuln_results)} potensi kerentanan.")
         severities = {}
         for v in vuln_results:
