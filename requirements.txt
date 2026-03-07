@@ -1,0 +1,4 @@
+pyyaml
+requests
+colorama
+ollama  # optional, untuk komunikasi dengan Ollama

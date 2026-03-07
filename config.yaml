@@ -1,0 +1,30 @@
+# config.yaml - Konfigurasi Snooger
+
+tools:
+  subfinder: "subfinder"
+  amass: "amass"
+  assetfinder: "assetfinder"
+  dnsx: "dnsx"
+  httpx: "httpx"
+  nuclei: "nuclei"
+  nmap: "nmap"
+  sqlmap: "sqlmap"
+  ffuf: "ffuf"
+  whatweb: "whatweb"
+  curl: "curl"
+  git: "git"
+  wpscan: "wpscan"
+  xsstrike: "xsstrike"
+  commix: "commix"
+  testssl: "testssl.sh"
+  arjun: "arjun"
+  gobuster: "gobuster"
+  dirsearch: "dirsearch"
+
+ai:
+  mode: "auto"  # auto, smart, light, off
+  model_smart: "llama3.2"
+  model_light: "phi3:mini"
+  ollama_host: "http://localhost:11434"
+
+workspace: "workspace"
