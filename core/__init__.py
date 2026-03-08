@@ -1,0 +1,1 @@
+# Snooger Core Package

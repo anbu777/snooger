@@ -14,15 +14,76 @@ tools:
   wpscan: "wpscan"
   xsstrike: "xsstrike"
   commix: "commix"
-  testssl: "testssl"
+  testssl: "testssl.sh"
   arjun: "arjun"
   gobuster: "gobuster"
   dirsearch: "dirsearch"
+  subjack: "subjack"
+  subzy: "subzy"
+  gau: "gau"
+  waybackurls: "waybackurls"
+  interactsh_client: "interactsh-client"
 
 ai:
   mode: "auto"
-  model_smart: "llama3.2"
-  model_light: "tinyllama"
-  ollama_host: "http://localhost:11434"
+  provider: "ollama"
+  deepseek:
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: "deepseek-chat"
+  huggingface:
+    api_token: "${HUGGINGFACE_API_TOKEN}"
+    model: "meta-llama/Llama-2-7b-chat-hf"
+  ollama:
+    model_smart: "llama3.2"
+    model_light: "tinyllama"
+    host: "http://localhost:11434"
+
+rate_limit:
+  requests_per_second: 5
+  delay_between_phases: 2
+  adaptive_delay: true
+  max_retries: 3
+
+stealth:
+  use_fake_useragent: true
+  rotate_useragent: true
+  random_delay_min: 0.5
+  random_delay_max: 2.0
+
+proxy:
+  enabled: false
+  http: ""
+  https: ""
+  socks5: ""
+  rotate: false
+  proxy_list: ""
+
+interactsh:
+  server: "oast.pro"
+  token: "${INTERACTSH_TOKEN}"
+  enabled: false
 
 workspace: "workspace"
+
+profiles:
+  quick:
+    skip_scan: false
+    skip_post: true
+    nuclei_severity: "critical,high"
+    ffuf_threads: 20
+    ffuf_delay: 1.0
+    max_subdomains: 50
+  stealth:
+    skip_scan: false
+    skip_post: true
+    nuclei_severity: "critical,high,medium"
+    ffuf_threads: 5
+    ffuf_delay: 3.0
+    max_subdomains: 100
+  thorough:
+    skip_scan: false
+    skip_post: false
+    nuclei_severity: "critical,high,medium,low"
+    ffuf_threads: 30
+    ffuf_delay: 0.5
+    max_subdomains: 500

