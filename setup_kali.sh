@@ -24,6 +24,13 @@ sudo apt install -y git jq curl golang python3-pip python3-venv \
     nmap masscan ffuf gobuster dirsearch sqlmap commix wpscan \
     amass assetfinder seclists wordlists
 
+# Update PATH permanently in .bashrc if not exists
+if ! grep -q "go/bin" "$HOME/.bashrc"; then
+    echo 'export GOPATH=$HOME/go' >> "$HOME/.bashrc"
+    echo 'export PATH=$PATH:$GOPATH/bin' >> "$HOME/.bashrc"
+    echo -e "${YELLOW}[!] Added go/bin to .bashrc. Please run 'source ~/.bashrc' after setup.${NC}"
+fi
+
 # 3. Install ProjectDiscovery Tools & Go-based Tools
 echo -e "\n${YELLOW}[+] Installing Go-based advanced tools...${NC}"
 # Setup Go path
