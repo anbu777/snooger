@@ -6,7 +6,8 @@ import re
 import logging
 import requests
 from urllib.parse import urljoin, urlparse, parse_qs
-from bs4 import BeautifulSoup
+import warnings
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 from typing import List, Set, Dict, Optional
 from core.rate_limiter import get_rate_limiter
 from core.utils import random_user_agent, write_json

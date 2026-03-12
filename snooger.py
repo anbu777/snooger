@@ -246,9 +246,27 @@ async def phase_auth_testing(target: str, workspace: str, config: dict,
     target_url = f"https://{target}" if not target.startswith('http') else target
 
     logger.info("Running authentication tests...")
+    
+    # Auto-detect login URL if not provided
+    visited = crawl_data.get('crawler', {}).get('visited_urls', [])
+    login_url = next((u for u in visited if any(k in u.lower() for k in ['login', 'signin', 'auth', 'session'])), None)
+    if login_url:
+        logger.info(f"Auto-detected potential login URL: {login_url}")
+    
+    # Auto-detect JWT from headers or cookies in crawl data
+    jwt_token = None
+    for url, data in crawl_data.get('crawler', {}).get('responses', {}).items():
+        headers = data.get('headers', {})
+        auth_hdr = headers.get('Authorization', '')
+        if 'Bearer ' in auth_hdr:
+            jwt_token = auth_hdr.split('Bearer ')[1].strip()
+            break
+
     auth_results = run_auth_tests(
         target_url, workspace,
-        crawler_results=crawl_data.get('crawler', {})
+        crawler_results=crawl_data.get('crawler', {}),
+        login_url=login_url,
+        jwt_token=jwt_token
     )
     state.save_phase_data('auth_testing', auth_results)
 
@@ -283,12 +301,22 @@ async def phase_exploitation(target: str, workspace: str, config: dict,
     logger = logging.getLogger('snooger')
 
     all_findings = []
-    for phase_name in ['nuclei', 'active_vulns', 'idor', 'auth_testing']:
+    # Dynamic Phase Data Collection
+    sources = ['nuclei', 'active_vulns', 'idor', 'auth_testing', 'js_analysis']
+    for phase_name in sources:
         phase_data = state.get_phase_data(phase_name) or {}
         if isinstance(phase_data, dict):
-            for key, val in phase_data.items():
+            # Standard finding lists
+            for key in ['findings', 'secrets', 'idor', 'jwt_findings', 'oauth_findings']:
+                val = phase_data.get(key)
                 if isinstance(val, list):
                     all_findings.extend(val)
+            
+            # Direct findings list if present
+            if 'findings' in phase_data and isinstance(phase_data['findings'], list):
+                all_findings.extend(phase_data['findings'])
+        elif isinstance(phase_data, list):
+            all_findings.extend(phase_data)
 
     if not all_findings:
         logger.info("No findings for exploitation phase")
@@ -574,7 +602,12 @@ async def run_scan(args, config: dict) -> None:
         executor.shutdown()
 
     # ─── Summary ──────────────────────────────────────────────────
-    findings_count = state.findings_count() if hasattr(state, 'findings_count') else 0
+    # Priority: report_data summary > database findings_count
+    findings_count = 0
+    if phase_results.get('report') and 'summary' in phase_results['report']:
+        findings_count = phase_results['report']['summary'].get('total_findings', 0)
+    else:
+        findings_count = state.findings_count() if hasattr(state, 'findings_count') else 0
 
     summary = {
         'Target': target,

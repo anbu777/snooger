@@ -258,11 +258,15 @@ def extract_ids_from_urls(urls: List[str]) -> List[Tuple[str, str, str]]:
     for url in urls:
         parsed = urlparse(url)
         # Check path segments
-        for segment in parsed.path.split('/'):
-            if segment:
-                id_type = detect_id_type(segment)
-                if id_type:
-                    candidates.append((url, segment, id_type))
+        segments = [s for s in parsed.path.split('/') if s]
+        for segment in segments:
+            id_type = detect_id_type(segment)
+            if id_type:
+                candidates.append((url, segment, id_type))
+            # New: Aggressive segment detection for alphanumeric IDs (often used in APIs)
+            elif len(segment) >= 8 and len(segment) <= 40 and any(c.isdigit() for c in segment):
+                candidates.append((url, segment, 'alphanumeric'))
+        
         # Check query params
         params = parse_qs(parsed.query)
         for param_name, values in params.items():
@@ -270,6 +274,8 @@ def extract_ids_from_urls(urls: List[str]) -> List[Tuple[str, str, str]]:
                 id_type = detect_id_type(value)
                 if id_type:
                     candidates.append((url, value, id_type))
+                elif len(value) >= 4 and len(value) <= 20 and any(c.isdigit() for c in value):
+                    candidates.append((url, value, 'alphanumeric_small'))
     return candidates
 
 def scan_idor(auth, urls: List[str], workspace_dir: str) -> List[dict]:
