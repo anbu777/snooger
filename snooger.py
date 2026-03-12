@@ -170,7 +170,16 @@ async def phase_crawl(target: str, workspace: str, config: dict,
         secrets = js_results.get('secrets', [])
         if secrets:
             logger.warning(f"Found {len(secrets)} secrets in JavaScript files!")
-            for s in secrets[:5]:
+            for s in secrets:
+                # Register secret as a formal finding in state DB
+                finding = {
+                    'type': f"secret_{s.get('type', 'generic')}",
+                    'severity': s.get('severity', 'high'),
+                    'url': s.get('file', ''),
+                    'evidence': s.get('context', '')[:500],
+                    'data': s
+                }
+                state.add_finding(finding, source='js_analyzer')
                 emit('secret_found', s, source='js_analyzer')
 
     emit('phase_completed', {'phase': 'crawl'}, source='crawl')
@@ -541,7 +550,8 @@ async def run_scan(args, config: dict) -> None:
         # Phase 5: Auth Testing
         print_phase_header(5, "Authentication & Authorization Testing")
         auth_data = state.get_phase_data('auth_results')
-        if args.resume and auth_data:
+        # Re-run if previous results were empty or missing
+        if args.resume and auth_data and auth_data.get('brute_force'):
             logger.info("Resuming Phase 5: Loaded data from state.")
         else:
             auth_data = await phase_auth_testing(target, workspace, config,
@@ -553,7 +563,8 @@ async def run_scan(args, config: dict) -> None:
         # Phase 6: Business Logic
         print_phase_header(6, "Business Logic Testing")
         biz_data = state.get_phase_data('biz_results')
-        if args.resume and biz_data:
+        # Re-run if IDOR tests weren't actually performed
+        if args.resume and biz_data and biz_data.get('idor'):
             logger.info("Resuming Phase 6: Loaded data from state.")
         else:
             biz_data = await phase_business_logic(target, workspace, config,
@@ -570,15 +581,20 @@ async def run_scan(args, config: dict) -> None:
                 logger.info("Resuming Phase 7: Loaded data from state.")
             else:
                 exploit_data = await phase_exploitation(target, workspace, config,
-                                                         state, ai, vuln_data)
+                                                        state, ai, vuln_data)
                 state.save_phase_data('exploit_results', exploit_data)
             
-            phase_results['exploit'] = exploit_data
+            phase_results['exploitation'] = exploit_data
 
         # Phase 8: Reporting
         print_phase_header(8, "Report Generation")
         report_data = state.get_phase_data('report_results')
-        if args.resume and report_data:
+        
+        # Priority: ensure report reflects current findings count in DB
+        total_in_db = state.findings_count() if hasattr(state, 'findings_count') else 0
+        report_findings = report_data.get('summary', {}).get('total_findings', 0) if report_data else 0
+        
+        if args.resume and report_data and (report_findings >= total_in_db) and total_in_db > 0:
             logger.info("Resuming Phase 8: Loaded data from state.")
         else:
             report_data = await phase_reporting(target, workspace, config, state, ai)
