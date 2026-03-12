@@ -82,10 +82,16 @@ async def phase_recon(target: str, workspace: str, config: dict,
 
     # Content discovery on main target
     logger.info("Starting content discovery...")
+    profile = config.get('_profile', {})
+    threads = profile.get('ffuf_threads', 20)
+    delay = profile.get('ffuf_delay', 0.5)
+
     try:
         content = discover_content(
             f"https://{target}" if not target.startswith('http') else target,
             workspace,
+            threads=threads,
+            delay=delay
         )
         results['content'] = content
         state.save_phase_data('recon_content', content)

@@ -197,7 +197,8 @@ def discover_content(domain: str, workspace_dir: str,
             cmd += f" -H 'Cookie: {cookie_str}'"
 
     logger.info(f"Running ffuf with {threads} threads, {delay}s delay...")
-    stdout, stderr, rc = run_command(cmd, timeout=1800)
+    # Increase timeout for stealth scans with large wordlists
+    stdout, stderr, rc = run_command(cmd, timeout=7200)
     save_raw_output(workspace_dir, 'recon', 'ffuf', stdout + stderr, 'txt')
 
     results = {'paths': [], 'count': 0}
