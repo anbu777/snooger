@@ -5,6 +5,7 @@ import re
 import json
 import logging
 import requests
+import os
 from typing import List, Dict, Optional
 from core.utils import write_json, random_user_agent
 from core.rate_limiter import get_rate_limiter
@@ -257,7 +258,7 @@ def test_api_key_in_response(url: str, auth=None) -> List[dict]:
     return findings
 
 def run_api_tests(target: str, workspace_dir: str, auth=None,
-                  crawler_results: dict = None) -> dict:
+                  crawler_results = None) -> dict:
     """Run comprehensive API security tests."""
     logger.info(f"Starting API security testing for {target}")
     results = {

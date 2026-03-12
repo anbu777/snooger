@@ -84,7 +84,7 @@ class RateLimiter:
             }
 
 
-def init_rate_limiter(config: dict = None) -> RateLimiter:
+def init_rate_limiter(config = None) -> RateLimiter:
     """Initialize the global rate limiter from config."""
     global _global_limiter
     config = config or {}

@@ -1,0 +1,2 @@
+c:\Users\LENOVO\Documents\snooger\snooger.py:97:44 - error: Cannot access attribute "get" for class "List[str]"
+c:\Users\LENOVO\Documents\snooger\snooger.py:151:22 - error: Argument missing for parameter "workspace_dir" (reportCallIssue)

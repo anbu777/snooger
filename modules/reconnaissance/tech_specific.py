@@ -9,7 +9,7 @@ import os, requests
 
 logger = logging.getLogger('snooger')
 
-def run_wpscan(target: str, workspace_dir: str, api_token: str = None) -> dict:
+def run_wpscan(target: str, workspace_dir: str, api_token = None) -> dict:
     """Run WPScan for WordPress-specific vulnerabilities."""
     logger.info(f"Running WPScan on {target}")
     output_file = os.path.join(workspace_dir, 'wpscan_results.json')

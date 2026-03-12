@@ -127,6 +127,6 @@ def enumerate_dns(domain: str, workspace_dir: str) -> dict:
     return results
 
 
-def run_dns_enum(target: str, workspace_dir: str, config: dict = None) -> dict:
+def run_dns_enum(target: str, workspace_dir: str, config = None) -> dict:
     """Entry point for DNS enumeration."""
     return enumerate_dns(target, workspace_dir)

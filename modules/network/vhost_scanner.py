@@ -25,7 +25,7 @@ def load_vhost_wordlist() -> List[str]:
 
 
 def scan_vhosts(target_ip: str, domain: str, workspace_dir: str,
-                config: dict = None, custom_wordlist: str = None) -> dict:
+                config = None, custom_wordlist = None) -> dict:
     """
     Discover virtual hosts by fuzzing the Host header.
     Compares response to baseline to detect different vhosts.
@@ -132,6 +132,6 @@ def _extract_title(html: str) -> str:
 
 
 def run_vhost_scan(target_ip: str, domain: str, workspace_dir: str,
-                   config: dict = None) -> dict:
+                   config = None) -> dict:
     """Entry point for virtual host scanning."""
     return scan_vhosts(target_ip, domain, workspace_dir, config)

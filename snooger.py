@@ -68,24 +68,24 @@ def setup_logging(workspace_dir: str, verbose: bool = False) -> logging.Logger:
 async def phase_recon(target: str, workspace: str, config: dict,
                       scope, state, ai, executor, context) -> dict:
     """Phase 1: Reconnaissance — subdomain enumeration, alive check, tech detection."""
-    from modules.reconnaissance.subdomain import run_subdomain_enum
-    from modules.reconnaissance.content_discovery import run_content_discovery
+    from modules.reconnaissance.subdomain import run_full_subdomain_enum
+    from modules.reconnaissance.content_discovery import discover_content
 
     logger = logging.getLogger('snooger')
     results = {}
 
     # Subdomain enumeration
     logger.info("Starting subdomain enumeration...")
-    subdomains = run_subdomain_enum(target, workspace, config)
+    subdomains = run_full_subdomain_enum(target, workspace)
     results['subdomains'] = subdomains
     state.save_phase_data('recon_subdomains', subdomains)
 
     # Content discovery on main target
     logger.info("Starting content discovery...")
     try:
-        content = run_content_discovery(
+        content = discover_content(
             f"https://{target}" if not target.startswith('http') else target,
-            workspace, config
+            workspace,
         )
         results['content'] = content
         state.save_phase_data('recon_content', content)
@@ -94,7 +94,7 @@ async def phase_recon(target: str, workspace: str, config: dict,
         results['content'] = {}
 
     emit('phase_completed', {'phase': 'recon', 'results_summary': {
-        'subdomains_found': len(subdomains.get('all_subdomains', [])),
+        'subdomains_found': len(subdomains),
     }}, source='recon')
 
     return results
@@ -103,7 +103,7 @@ async def phase_recon(target: str, workspace: str, config: dict,
 async def phase_scanning(target: str, workspace: str, config: dict,
                          scope, state, ai, executor, recon_data: dict) -> dict:
     """Phase 2: Port Scanning & Technology Detection."""
-    from modules.scanning.port_scan import run_port_scan
+    from modules.scanning.port_scan import scan_ports
     from modules.scanning.tech_detect import run_tech_detection
 
     logger = logging.getLogger('snooger')
@@ -113,7 +113,7 @@ async def phase_scanning(target: str, workspace: str, config: dict,
 
     # Port scanning
     logger.info(f"Port scanning {len(alive_subs)} targets...")
-    scan_results = run_port_scan(alive_subs[:50], workspace, config)
+    scan_results = scan_ports(alive_subs[:50], workspace)
     results['port_scan'] = scan_results
     state.save_phase_data('port_scan', scan_results)
 
@@ -130,7 +130,7 @@ async def phase_scanning(target: str, workspace: str, config: dict,
 async def phase_crawl(target: str, workspace: str, config: dict,
                       scope, state, ai, executor, recon_data: dict) -> dict:
     """Phase 3: Web Crawling & JavaScript Analysis."""
-    from modules.crawler.web_crawler import run_crawler
+    from modules.crawler.web_crawler import crawl_target
     from modules.javascript.js_analyzer import analyze_js_files
 
     logger = logging.getLogger('snooger')
@@ -140,7 +140,7 @@ async def phase_crawl(target: str, workspace: str, config: dict,
 
     # Crawl the target
     logger.info("Starting web crawler...")
-    crawl = run_crawler(target_url, workspace, config, scope)
+    crawl = crawl_target(target_url, workspace)
     results['crawler'] = crawl
     state.save_phase_data('crawler', crawl)
 
@@ -148,7 +148,7 @@ async def phase_crawl(target: str, workspace: str, config: dict,
     js_files = crawl.get('js_files', [])
     if js_files:
         logger.info(f"Analyzing {len(js_files)} JavaScript files...")
-        js_results = analyze_js_files(js_files, workspace, config)
+        js_results = analyze_js_files(js_files, target_url, workspace)
         results['js_analysis'] = js_results
         state.save_phase_data('js_analysis', js_results)
 
@@ -167,7 +167,7 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
                               recon_data: dict, crawl_data: dict,
                               scan_data: dict) -> dict:
     """Phase 4: Vulnerability Analysis — Nuclei + Active Testing."""
-    from modules.vulnerability.nuclei_runner import run_nuclei_scan
+    from modules.vulnerability.nuclei_runner import run_nuclei
     from modules.vulnerability.active_vulns import run_active_vulnerability_tests
 
     logger = logging.getLogger('snooger')
@@ -180,7 +180,7 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
 
     # Nuclei scan
     logger.info("Running Nuclei vulnerability scanner...")
-    nuclei_results = run_nuclei_scan(alive_subs[:30], workspace, config, tech_stack)
+    nuclei_results = run_nuclei(alive_subs[:30], workspace)
     results['nuclei'] = nuclei_results
     state.save_phase_data('nuclei', nuclei_results)
 
@@ -203,9 +203,9 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
                 emit(event_name, finding, source=vuln_type)
 
     # AI prioritization
-    if ai and nuclei_results.get('findings'):
+    if ai and isinstance(nuclei_results, list) and nuclei_results:
         logger.info("AI prioritizing vulnerability findings...")
-        prioritized = ai.prioritize_vulnerabilities(nuclei_results['findings'])
+        prioritized = ai.prioritize_vulnerabilities(nuclei_results)
         results['ai_prioritized'] = prioritized
 
     emit('phase_completed', {'phase': 'vuln_analysis'}, source='vuln_analysis')
@@ -235,7 +235,7 @@ async def phase_auth_testing(target: str, workspace: str, config: dict,
 async def phase_business_logic(target: str, workspace: str, config: dict,
                                state, crawl_data: dict) -> dict:
     """Phase 6: Business Logic Testing — IDOR, Race Conditions."""
-    from modules.business_logic.idor import run_idor_tests
+    from modules.business_logic.idor import scan_idor
 
     logger = logging.getLogger('snooger')
     results = {}
@@ -243,7 +243,7 @@ async def phase_business_logic(target: str, workspace: str, config: dict,
     urls = crawl_data.get('crawler', {}).get('urls_with_params', [])
     if urls:
         logger.info("Running IDOR tests...")
-        idor_results = run_idor_tests(urls[:20], workspace)
+        idor_results = scan_idor(None, urls[:20], workspace)
         results['idor'] = idor_results
         state.save_phase_data('idor', idor_results)
 
@@ -254,7 +254,7 @@ async def phase_business_logic(target: str, workspace: str, config: dict,
 async def phase_exploitation(target: str, workspace: str, config: dict,
                              state, ai, vuln_data: dict) -> dict:
     """Phase 7: Exploitation — Chain Detection & PoC Generation."""
-    from modules.exploitation.chain_engine import detect_exploit_chains
+    from modules.exploitation.chain_engine import detect_chains
 
     logger = logging.getLogger('snooger')
 
@@ -271,7 +271,7 @@ async def phase_exploitation(target: str, workspace: str, config: dict,
         return {}
 
     logger.info(f"Analyzing {len(all_findings)} findings for exploit chains...")
-    chains = detect_exploit_chains(all_findings)
+    chains = detect_chains(all_findings)
 
     if chains:
         logger.warning(f"Found {len(chains)} potential exploit chains!")
@@ -279,11 +279,11 @@ async def phase_exploitation(target: str, workspace: str, config: dict,
             emit('chain_detected', chain, source='chain_engine')
 
     # AI PoC generation for critical findings
-    critical = [f for f in all_findings if f.get('severity') == 'critical']
+    critical: list[dict] = [f for f in all_findings if f.get('severity') == 'critical']
     pocs = []
     if ai and critical:
-        logger.info(f"Generating AI PoC writeups for {len(critical[:5])} critical findings...")
-        for finding in critical[:5]:
+        logger.info(f"Generating AI PoC writeups for {len(list(critical)[:5])} critical findings...")  # type: ignore
+        for finding in list(critical)[:5]:  # type: ignore
             poc = ai.generate_poc_writeup(finding)
             if poc:
                 pocs.append({'finding': finding, 'poc': poc})
@@ -299,7 +299,7 @@ async def phase_reporting(target: str, workspace: str, config: dict,
                           state, ai) -> dict:
     """Phase 8: Report Generation."""
     from modules.reporting.json_builder import build_final_report
-    from modules.reporting.ai_summary import generate_reports
+    from modules.reporting.ai_summary import generate_summary, generate_markdown_report
 
     logger = logging.getLogger('snooger')
 
@@ -307,7 +307,8 @@ async def phase_reporting(target: str, workspace: str, config: dict,
     report = build_final_report(workspace, target, state)
 
     logger.info("Generating AI summary and reports...")
-    reports = generate_reports(workspace, report, ai, config)
+    ai_synopsis = generate_summary(ai, report)
+    reports = generate_markdown_report(report, ai_synopsis, workspace)
 
     emit('phase_completed', {'phase': 'reporting'}, source='reporting')
     return {'report': report, 'report_files': reports}
@@ -317,6 +318,7 @@ async def phase_reporting(target: str, workspace: str, config: dict,
 
 async def run_scan(args, config: dict) -> None:
     """Main async scan orchestrator."""
+    start_time = time.time()
     target = args.target
     logger = logging.getLogger('snooger')
 
@@ -344,7 +346,7 @@ async def run_scan(args, config: dict) -> None:
     if hasattr(args, 'scope') and args.scope:
         scope.load_from_file(args.scope)
     else:
-        scope.add_domain(domain)
+        scope.add_target(domain)
 
     # AI engine
     ai = None
@@ -449,7 +451,6 @@ async def run_scan(args, config: dict) -> None:
 
     finally:
         executor.shutdown()
-        state.close()
 
     # ─── Summary ──────────────────────────────────────────────────
     findings_count = state.findings_count() if hasattr(state, 'findings_count') else 0
@@ -457,7 +458,7 @@ async def run_scan(args, config: dict) -> None:
     summary = {
         'Target': target,
         'Workspace': workspace,
-        'Duration': f"{time.time():.0f}s",
+        'Duration': f"{time.time() - start_time:.0f}s" if 'start_time' in locals() else "N/A",
         'Total Findings': findings_count,
     }
 
@@ -469,6 +470,9 @@ async def run_scan(args, config: dict) -> None:
     }, source='main')
 
     logger.info(f"\n✅ Scan complete! Reports saved to: {workspace}")
+    
+    # Close state manager last
+    state.close()
 
 
 # ─── CLI Arguments ────────────────────────────────────────────────────

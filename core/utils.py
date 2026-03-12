@@ -112,12 +112,13 @@ def load_jsonl_file(filepath: str) -> List[dict]:
     return results
 
 
-def save_raw_output(workspace_dir: str, filename: str, content: str) -> str:
+def save_raw_output(workspace_dir: str, category: str, tool_name: str, content: str, ext: str = 'txt') -> str:
     """Save raw command output to workspace."""
-    raw_dir = os.path.join(workspace_dir, 'raw')
+    raw_dir = os.path.join(workspace_dir, 'raw', category)
     os.makedirs(raw_dir, exist_ok=True)
+    filename = f"{tool_name}.{ext}" if ext else tool_name
     filepath = os.path.join(raw_dir, filename)
-    with open(filepath, 'w', encoding='utf-8') as f:
+    with open(filepath, 'w', encoding='utf-8', errors='ignore') as f:
         f.write(content)
     return filepath
 

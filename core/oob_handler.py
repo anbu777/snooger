@@ -29,7 +29,7 @@ class OOBHandler:
         self._secret_key = None
         self._interactions: list = []
         self._polling: bool = False
-        self._poll_thread: threading.Thread = None
+        self._poll_thread = None
 
     def setup(self) -> bool:
         """Initialize interactsh session. Returns True on success."""

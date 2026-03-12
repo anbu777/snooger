@@ -15,7 +15,7 @@ logger = logging.getLogger('snooger')
 
 class WebCrawler:
     def __init__(self, base_url: str, auth=None, max_pages: int = 200,
-                 max_depth: int = 3, scope=None, config: dict = None):
+                 max_depth: int = 3, scope=None, config = None):
         self.base_url = base_url.rstrip('/')
         self.base_domain = urlparse(base_url).netloc
         self.auth = auth
@@ -60,7 +60,7 @@ class WebCrawler:
                 resp = self.session.get(current_url, timeout=10,
                                         allow_redirects=True, verify=False)
                 if resp.status_code == 200:
-                    new_urls = self._extract_links(current_url, resp.text, resp.headers)
+                    new_urls = self._extract_links(current_url, resp.text, dict(resp.headers))
                     self._extract_forms(current_url, resp.text)
                     self._extract_parameters(current_url)
 
@@ -86,7 +86,7 @@ class WebCrawler:
         for tag in soup.find_all(['a', 'link', 'area']):
             href = tag.get('href', '')
             if href:
-                abs_url = urljoin(base_url, href)
+                abs_url = urljoin(base_url, str(href))
                 abs_url = abs_url.split('#')[0]  # Remove fragments
                 parsed = urlparse(abs_url)
                 if parsed.scheme in ('http', 'https') and self.base_domain in parsed.netloc:
@@ -96,7 +96,7 @@ class WebCrawler:
         for tag in soup.find_all('script'):
             src = tag.get('src', '')
             if src:
-                abs_src = urljoin(base_url, src)
+                abs_src = urljoin(base_url, str(src))
                 if abs_src.endswith('.js'):
                     self.js_files.add(abs_src)
 
@@ -129,8 +129,8 @@ class WebCrawler:
 
         for form in soup.find_all('form'):
             action = form.get('action', url)
-            method = form.get('method', 'GET').upper()
-            form_url = urljoin(url, action)
+            method = str(form.get('method', 'GET')).upper()
+            form_url = urljoin(url, str(action))
 
             inputs = []
             for inp in form.find_all(['input', 'textarea', 'select']):
@@ -179,7 +179,7 @@ class WebCrawler:
         }
 
 def crawl_target(target: str, workspace_dir: str, auth=None,
-                 scope=None, config: dict = None) -> dict:
+                 scope=None, config = None) -> dict:
     """Crawl a target and save results."""
     max_pages = (config or {}).get('_profile', {}).get('max_pages', 200)
     crawler = WebCrawler(target, auth=auth, max_pages=max_pages, scope=scope, config=config)

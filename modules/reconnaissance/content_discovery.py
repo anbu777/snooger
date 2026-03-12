@@ -67,7 +67,7 @@ def get_wordlist(tech_stack: Optional[List[str]] = None) -> str:
             logger.info(f"Using wordlist: {wl}")
             return wl
 
-    return None
+    return ""
 
 def generate_custom_wordlist(domain: str, page_content: str, workspace_dir: str) -> str:
     """Generate domain-specific wordlist from page content and domain name."""
@@ -118,7 +118,7 @@ def check_sensitive_files(base_url: str, workspace_dir: str,
         cj = http.cookiejar.MozillaCookieJar(cookies_file)
         try:
             cj.load()
-            session.cookies = cj
+            session.cookies.update(cj)
         except Exception:
             pass
 

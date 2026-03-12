@@ -4,6 +4,7 @@ HTTP security headers, error message analysis, response header analysis,
 session management, cookie flags.
 """
 import re
+import os
 import logging
 import requests
 from typing import List, Dict

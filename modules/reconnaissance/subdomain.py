@@ -139,7 +139,7 @@ def attempt_zone_transfer(domain: str) -> List[str]:
 
 def whois_asn_lookup(domain: str, workspace_dir: str) -> dict:
     """WHOIS and ASN data collection."""
-    result = {'whois': None, 'asn': None}
+    result: dict = {'whois': None, 'asn': None}
     whois_stdout, _, _ = run_command(f"whois {domain}", timeout=20)
     if whois_stdout:
         result['whois'] = whois_stdout[:2000]

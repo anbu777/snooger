@@ -1,97 +1,124 @@
-# 🕷️ Snooger v3.0
-
-> **An overpowered, AI-driven, asynchronous penetration testing framework.**
-
-Snooger v3.0 is a complete overhaul of the original framework, designed specifically for professional bug bounty hunters and penetration testers on Kali Linux. It combines high-speed asynchronous enumeration with an intelligent multi-provider AI engine to prioritize vulnerabilities, suggest payloads, and triage false positives.
-
-![Kali Linux Supported](https://img.shields.io/badge/OS-Kali_Linux-blue?style=flat-square&logo=kalilinux)
-![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-green?style=flat-square&logo=python)
-![AsyncIO](https://img.shields.io/badge/Architecture-Async-purple?style=flat-square)
+<div align="center">
+  <img src="https://raw.githubusercontent.com/snooger/snooger/main/assets/logo.png" alt="Snooger Logo" width="200"/>
+  <h1>🛡️ Snooger Pentesting Framework</h1>
+  <p><b>An Overpowered, AI-Driven, Intelligent Web Application Security Scanner</b></p>
+  <p>
+    <a href="https://github.com/snooger-env/snooger"><img src="https://img.shields.io/badge/Maintained%3F-yes-green.svg" alt="Maintenance"></a>
+    <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+"></a>
+    <a href="https://kali.org"><img src="https://img.shields.io/badge/Kali-Linux-black.svg?logo=kali-linux" alt="Kali Linux"></a>
+    <a href="https://mit-license.org/"><img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License: MIT"></a>
+  </p>
+</div>
 
 ---
 
-## 🔥 Key Features
+## 📖 Overview
 
-- **⚡ Async Engine:** Built on `asyncio` and `aiohttp` for blistering fast parallel execution, rate limiting, and connection pooling.
-- **🤖 Multi-Provider AI (Auto-Fallback):** Support for Local AI (Ollama) and Free Cloud AI (Groq, DeepSeek). Automatically prioritizes critical findings, suggests context-aware payloads, and triages false positives.
-- **💉 Massive Payload Database:** Over **2,000+ real-world payloads** meticulously categorized (XSS, SQLi, SSTI, LFI, SSRF, RCE, XXE, JWT, Polyglots, and more), including advanced WAF bypasses.
-- **🔌 Extensible Plugin System:** Easily write custom `BaseScanner` plugins and drop them into the `plugins/` folder for auto-discovery.
-- **📡 Event-Driven Architecture:** Decoupled Pub/Sub `EventBus` handles real-time inter-module communication.
-- **📊 State Management:** Resumable scans and delta reporting. Never lose progress during a long engagement.
-- **🔔 Real-time Notifications:** Instant alerts via **Telegram** and **Discord** webhooks when critical vulnerabilities are found.
-- **🛠️ Platform Integration:** Direct submission to **HackerOne** and **Bugcrowd** (Draft mode supported), generating professional-grade AI PoC writeups automatically.
+**Snooger** is a next-generation, asynchronous web application penetration testing framework designed exclusively for **Kali Linux**. Engineered for red teamers, bug bounty hunters, and security researchers, Snooger automates the entire offensive security lifecycle—from reconnaissance and vulnerability discovery to post-exploitation and automated AI reporting.
 
-## ⚙️ Prerequisites
+Powered by a modular plugin architecture and state-of-the-art AI analysis (via Groq/Llama3 and local Ollama inference), Snooger dynamically adapts its payload execution to the target's underlying technology stack, evades WAFs, and hunts for complex exploit chains that traditional scanners miss.
 
-Snooger is designed and tested exclusively for **Kali Linux**.
+## 🚀 Key Features
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/snooger.git
-cd snooger
+### 🔍 Unparalleled Reconnaissance
+- **Intelligent Spidering & Crawling**: JavaScript parsing, parameterized URL extraction, and API endpoint discovery.
+- **Deep Content Discovery**: Context-aware directory brute-forcing based on detected server technologies.
+- **Subdomain Enumeration**: Passive OSINT gathering combined with active bruteforcing, DNS resolution, and takeover validation.
+- **Port & Service Scanning**: Rapid `nmap`-like asynchronous port scanning with service banner grabbing.
 
-# Install dependencies
-pip install -r requirements.txt
-```
+### 💥 Active Vulnerability Hunting
+- **Advanced Injection Detection**: SQLi (Error, Blind, Time-based), XSS (Reflected, Stored, DOM), command injection, CRLF, and Host Header injection.
+- **Business Logic Flaws**: Out-of-the-box IDOR detection and access control bypass testing.
+- **Server Misconfigurations**: SSTI, XXE, CORS misconfigurations, Open Redirects, and insecure HTTP methods.
+- **Exploit Chain Engine**: Automatically links low-severity findings (e.g., Information Disclosure + CSRF) into high-impact exploit chains.
 
-### External Tools Required (Kali Linux):
-Most of these are pre-installed on Kali Linux. Snooger will automatically detect them.
-- `sqlmap` (For automated database takeover)
-- `nmap` (For service identification)
-- `nuclei` (For template-based scanning)
+### 🧠 AI-Powered Analysis
+- **Smart Remediation**: Integrates with Groq API and local Ollama to provide intelligent, contextual remediation advice and payload mutation suggestions.
+- **Automated Reporting**: Generates sleek Markdown and JSON reports featuring AI-summarized executive briefs.
+- **Zero-False-Positive Tuning**: AI correlation analyzes responses to filter out standard scanner noise.
 
-## 🔧 Configuration
+### ⚙️ Engine Mechanics
+- **Asynchronous Core**: Built on Python `asyncio` and `aiohttp` for blindingly fast, unblocking I/O operations.
+- **Out-of-Band (OOB) Testing**: Built-in HTTP/DNS server modules for detecting blind vulnerabilities (Blind SSRF, Blind SQLi).
+- **Extensible Event Bus**: A robust messaging system that manages inter-module communication, allowing researchers to write custom plugins easily.
+- **Platform Integrations**: Built-in Bugcrowd and HackerOne API submission support, coupled with Telegram and Discord webhook notifications.
 
-Copy the example configuration to set up your API keys and webhooks.
+## 🛠️ Installation
 
-```bash
-cp .env.example .env
-```
-Edit `.env` to include:
-- `GROQ_API_KEY` (Get a free key from console.groq.com for high-speed cloud AI)
-- `DISCORD_WEBHOOK_URL` / `TELEGRAM_BOT_TOKEN` for notifications.
+Snooger is built for **Kali Linux** but will work on most Unix-like environments. 
 
-## 🚀 Usage
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/snooger.git
+   cd snooger
+   ```
 
-Snooger features a beautiful, interactive CLI powered by Rich.
+2. **Set up a virtual environment (Recommended):**
+   ```bash
+   python3 -m venv snooger-env
+   source snooger-env/bin/activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Initialize Submodules & Tools:**
+   Ensure you have Go installed on your Kali VM to utilize Nuclei integrations.
+   ```bash
+   go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+   ```
+
+5. **Configure Environment Variables:**
+   Rename `.env.example` to `.env` and fill in your API keys:
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+
+## 🎯 Usage
+
+Snooger is incredibly intuitive. The CLI offers multiple modes of engagement depending on your required stealth and comprehensiveness.
 
 ### Basic Scan
+Run a full pentest against a target with default settings:
 ```bash
-python snooger.py -t https://example.com
+python snooger.py -t https://target.com
 ```
 
-### Scan with Specific Profile
+### Stealth Mode + AI
+Evade early detection and utilize the Groq/Ollama AI engine for intelligent payload generation:
 ```bash
-# Use 'stealth' profile to evade WAFs
-python snooger.py -t https://example.com -p stealth
-
-# Fast scan, skip exploitation phase
-python snooger.py -t https://example.com -p quick --skip-exploit
+python snooger.py -t https://target.com -p stealth --ai-mode smart
 ```
 
-### Manage Plugins & Wordlists
+### Comprehensive Bug Bounty Mode
+Initialize everything: Deep crawling, OOB testing, API fuzzing, and Nuclei templates:
 ```bash
-python snooger.py --list-plugins
-python snooger.py --list-wordlists
+python snooger.py -t https://target.com -p aggressive --crawl-depth 5 --enable-oob
 ```
 
-## 🏗️ Architecture Phases
+### Modular Execution
+Only run specific modules (e.g., SQLi and XSS testing):
+```bash
+python snooger.py -t https://target.com -m sqli,xss
+```
 
-Snooger automates the entire pentesting lifecycle across 8 distinct phases:
+## 🏗️ Architecture Design
 
-1. **Reconnaissance:** DNS enum, Subdomain brute-forcing, tech detection, parameter discovery.
-2. **Network/Service:** Port scanning, Nmap version detection, VHost enum.
-3. **Crawling:** Spidering, JS analysis, extraction of hidden endpoints.
-4. **Vulnerability Scanning:** Active payload injection using 2000+ payloads.
-5. **Business Logic:** IDOR, Race Condition testing.
-6. **Exploitation:** Automated exploitation of confirmed vulns (e.g., SQLmap wrapping).
-7. **Post-Exploitation:** (Optional) Automated PE enum if RCE is achieved.
-8. **Reporting & Notification:** HTML/JSON/PDF reports and Platform API push.
+Snooger is built on a V3 modern framework structure:
+- **`core/`**: Contains the `AsyncExecutor`, `EventBus`, `StateManager` (SQLite), and the overarching AI Engine.
+- **`modules/`**: The heart of the offensive tooling. Categorized into `reconnaissance`, `scanning`, `vulnerability`, `exploitation`, and `post_exploitation`.
+- **`plugins/`**: Drop-in directory for community-driven scripts.
+- **`data/`**: Tailored, context-specific wordlists and bypass payloads.
 
-## 🤝 Contributing
+## ⚠️ Disclaimer
 
-We welcome contributions! Please review the `CONTRIBUTING.md` guidelines before opening PRs. 
+Snooger is created for **educational purposes and authorized ethical hacking only**. The contributors and maintainers are not responsible for any misuse, damage, or illegal activities caused by this tool. Always obtain explicit, written permission before scanning any networks or web applications. 
 
-## ⚖️ Legal Disclaimer
-
-Snooger is created for **legal, authorized penetration testing and authorized bug bounty hunting ONLY**. The developers are not responsible for any misuse, damage, or illegal activities performed with this tool. Always obtain written permission before scanning any target.
+---
+<div align="center">
+  <i>"Hack the Planet, Responsibly."</i><br>
+  Maintained by the Snooger Open Source Community
+</div>

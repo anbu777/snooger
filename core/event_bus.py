@@ -16,7 +16,7 @@ class Event:
     """Represents a framework event."""
     __slots__ = ('name', 'data', 'timestamp', 'source')
 
-    def __init__(self, name: str, data: Dict[str, Any] = None, source: str = ''):
+    def __init__(self, name: str, data = None, source: str = ''):
         self.name = name
         self.data = data or {}
         self.timestamp = datetime.utcnow().isoformat()
@@ -86,7 +86,7 @@ class EventBus:
             if callback in self._async_subscribers.get(event_name, []):
                 self._async_subscribers[event_name].remove(callback)
 
-    def emit(self, event_name: str, data: Dict[str, Any] = None,
+    def emit(self, event_name: str, data = None,
              source: str = '') -> Event:
         """Emit an event synchronously. Calls all sync subscribers."""
         event = Event(event_name, data, source)
@@ -104,7 +104,7 @@ class EventBus:
 
         return event
 
-    async def emit_async(self, event_name: str, data: Dict[str, Any] = None,
+    async def emit_async(self, event_name: str, data = None,
                          source: str = '') -> Event:
         """Emit an event asynchronously. Calls both sync and async subscribers."""
         event = Event(event_name, data, source)
@@ -166,12 +166,12 @@ def get_event_bus() -> EventBus:
     return _bus
 
 
-def emit(event_name: str, data: Dict[str, Any] = None, source: str = '') -> Event:
+def emit(event_name: str, data = None, source: str = '') -> Event:
     """Shortcut to emit an event on the global bus."""
     return get_event_bus().emit(event_name, data, source)
 
 
-async def emit_async(event_name: str, data: Dict[str, Any] = None,
+async def emit_async(event_name: str, data = None,
                      source: str = '') -> Event:
     """Shortcut to async emit on the global bus."""
     return await get_event_bus().emit_async(event_name, data, source)

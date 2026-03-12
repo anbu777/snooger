@@ -45,7 +45,7 @@ def _fire_concurrent(session: requests.Session, method: str, url: str,
     except Exception as e:
         results[idx] = {'status': 0, 'error': str(e), 'length': 0, 'text': '', 'time': 0}
 
-def test_race_condition(url: str, method: str = 'POST', data: dict = None,
+def test_race_condition(url: str, method: str = 'POST', data = None,
                          auth=None, threads: int = 20,
                          rounds: int = 3) -> Optional[dict]:
     """
@@ -169,8 +169,8 @@ def discover_race_targets(crawler_results: dict, historical_urls: list) -> List[
     return candidates
 
 def run_race_condition_tests(workspace_dir: str, auth=None,
-                              crawler_results: dict = None,
-                              historical_urls: list = None) -> List[dict]:
+                              crawler_results = None,
+                              historical_urls = None) -> List[dict]:
     """Run race condition tests on all identified candidates."""
     crawler_results = crawler_results or {}
     historical_urls = historical_urls or []

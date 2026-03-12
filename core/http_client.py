@@ -52,7 +52,7 @@ class AsyncHTTPClient:
     Features: retry, backoff, proxy rotation, UA rotation, rate limiting.
     """
 
-    def __init__(self, config: dict = None, auth=None):
+    def __init__(self, config = None, auth=None):
         self.config = config or {}
         self.auth = auth
         self._session: Optional[aiohttp.ClientSession] = None
@@ -94,7 +94,7 @@ class AsyncHTTPClient:
         self._proxy_index += 1
         return proxy
 
-    def _get_headers(self, extra_headers: dict = None) -> dict:
+    def _get_headers(self, extra_headers = None) -> dict:
         headers = {
             'User-Agent': random_ua() if self.rotate_ua else USER_AGENTS[0],
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -130,10 +130,10 @@ class AsyncHTTPClient:
         return self._session
 
     async def request(self, method: str, url: str,
-                      headers: dict = None, params: dict = None,
+                      headers = None, params = None,
                       data: Any = None, json: Any = None,
                       timeout: int = 15, allow_redirects: bool = True,
-                      max_retries: int = None) -> dict:
+                      max_retries = None) -> dict:
         """
         Make an HTTP request with retry and rate limiting.
         Returns dict with: status, headers, text, length, elapsed, error
@@ -255,7 +255,7 @@ class AsyncHTTPClient:
 class SyncHTTPClient:
     """Simple sync wrapper for use in modules that don't need async."""
 
-    def __init__(self, config: dict = None, auth=None):
+    def __init__(self, config = None, auth=None):
         self.config = config or {}
         self.auth = auth
         if auth and hasattr(auth, 'session'):

@@ -78,7 +78,7 @@ def extract_endpoints(js_content: str, base_url: str) -> List[str]:
             match = match.strip()
             if len(match) > 1 and not match.endswith('.js'):
                 if match.startswith('/'):
-                    endpoints.add(urljoin(base_url, match))
+                    endpoints.add(urljoin(base_url, str(match)))
                 elif match.startswith('http'):
                     endpoints.add(match)
     return list(endpoints)

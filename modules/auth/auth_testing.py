@@ -335,8 +335,8 @@ def test_forceful_browsing(base_url: str, crawler_results: dict,
     return findings
 
 def run_auth_tests(base_url: str, workspace_dir: str,
-                   auth=None, crawler_results: dict = None,
-                   login_url: str = None, jwt_token: str = None) -> dict:
+                   auth=None, crawler_results = None,
+                   login_url = None, jwt_token = None) -> dict:
     """Run all authentication and authorization tests."""
     results = {
         'brute_force': {},

@@ -1,0 +1,26 @@
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:28:17 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:31:21 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:41:25 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:43:25 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:106:17 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:107:17 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:116:17 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:138:17 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\interactive.py:151:17 - warning: "print" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\core\scope_manager.py:130:40 - error: Argument of type "IPv4Network | IPv6Network" cannot be assigned to parameter "object" of type "IPv4Network" in function "append"
+c:\Users\LENOVO\Documents\snooger\core\scope_manager.py:141:40 - error: Argument of type "IPv4Network | IPv6Network" cannot be assigned to parameter "object" of type "IPv4Network" in function "append"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:63:76 - error: Argument of type "CaseInsensitiveDict[str] | Unknown" cannot be assigned to parameter "headers" of type "dict[Unknown, Unknown]" in function "_extract_links"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:89:45 - error: Argument of type "_AttributeValue" cannot be assigned to parameter "url" of type "AnyStr@urljoin | None" in function "urljoin"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:99:45 - error: Argument of type "_AttributeValue" cannot be assigned to parameter "url" of type "AnyStr@urljoin | None" in function "urljoin"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:132:48 - error: Cannot access attribute "upper" for class "AttributeValueList"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:132:48 - warning: "upper" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:133:37 - error: Argument of type "_AttributeValue | None" cannot be assigned to parameter "url" of type "AnyStr@urljoin | None" in function "urljoin"
+c:\Users\LENOVO\Documents\snooger\modules\post_exploitation\linux_pe.py:106:68 - error: "quote" is not a known attribute of module "..utils" (reportAttributeAccessIssue)
+c:\Users\LENOVO\Documents\snooger\modules\scanning\port_scan.py:53:36 - warning: "get" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\Users\LENOVO\Documents\snooger\modules\validation\cors_validator.py:8:71 - error: Expression of type "None" cannot be assigned to parameter of type "Session"
+c:\Users\LENOVO\Documents\snooger\modules\validation\xss_validator.py:128:14 - warning: Import "selenium" could not be resolved (reportMissingImports)
+c:\Users\LENOVO\Documents\snooger\modules\validation\xss_validator.py:129:14 - warning: Import "selenium.webdriver.chrome.options" could not be resolved (reportMissingImports)
+c:\Users\LENOVO\Documents\snooger\modules\validation\xss_validator.py:130:14 - warning: Import "selenium.common.exceptions" could not be resolved (reportMissingImports)
+c:\Users\LENOVO\Documents\snooger\modules\vulnerability\additional_vulns.py:136:71 - error: Expression of type "None" cannot be assigned to parameter of type "Session"
+c:\Users\LENOVO\Documents\snooger\modules\vulnerability\additional_vulns.py:387:66 - error: Expression of type "None" cannot be assigned to parameter of type "Session"
+c:\Users\LENOVO\Documents\snooger\snooger.py:107:10 - warning: Import "modules.scanning.tech_detect" could not be resolved (reportMissingImports)

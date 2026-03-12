@@ -294,7 +294,7 @@ def check_mongodb_exposure(ip: str, port: int = 27017) -> Optional[dict]:
     return None
 
 def run_cloud_scans(domain: str, workspace_dir: str,
-                    alive_hosts: List[str] = None) -> dict:
+                    alive_hosts = None) -> dict:
     """Run all cloud and infrastructure exposure checks."""
     logger.info(f"Starting cloud/infrastructure scanning for {domain}")
     results = {

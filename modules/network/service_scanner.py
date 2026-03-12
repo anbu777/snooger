@@ -103,7 +103,7 @@ def parse_nmap_service_output(output: str) -> List[dict]:
 
 
 def scan_services(targets: List[str], workspace_dir: str,
-                  config: dict = None) -> dict:
+                  config = None) -> dict:
     """Run service version detection and CVE matching."""
     config = config or {}
     nmap_path = get_tool_path(config, 'nmap')
@@ -183,6 +183,6 @@ def grab_banner(host: str, port: int, timeout: int = 5) -> str:
 
 
 def run_service_scan(targets: List[str], workspace_dir: str,
-                     config: dict = None) -> dict:
+                     config = None) -> dict:
     """Entry point for service scanning."""
     return scan_services(targets, workspace_dir, config)

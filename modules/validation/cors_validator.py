@@ -5,7 +5,8 @@ import requests
 logger = logging.getLogger('snooger')
 
 
-def check_cors_misconfiguration(url: str, session: requests.Session = None) -> dict:
+from typing import Optional
+def check_cors_misconfiguration(url: str, session: Optional[requests.Session] = None) -> dict:
     """Check for CORS misconfiguration."""
     if not session:
         session = requests.Session()

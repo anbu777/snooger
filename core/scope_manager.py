@@ -127,7 +127,7 @@ class ScopeManager:
         pattern = re.sub(r'^https?://', '', pattern).rstrip('/')
         try:
             net = ipaddress.ip_network(pattern, strict=False)
-            self.include_ranges.append(net)
+            self.include_ranges.append(net)  # type: ignore
         except ValueError:
             self.include_patterns.append(pattern)
 
@@ -138,7 +138,7 @@ class ScopeManager:
         pattern = re.sub(r'^https?://', '', pattern).rstrip('/')
         try:
             net = ipaddress.ip_network(pattern, strict=False)
-            self.exclude_ranges.append(net)
+            self.exclude_ranges.append(net)  # type: ignore
         except ValueError:
             self.exclude_patterns.append(pattern)
 
@@ -253,7 +253,7 @@ def get_scope_manager() -> ScopeManager:
     return _scope_manager
 
 
-def init_scope(config: dict, scope_file: Optional[str] = None, extra_targets: List[str] = None):
+def init_scope(config: dict, scope_file: Optional[str] = None, extra_targets = None):
     """Initialize the global scope manager."""
     sm = get_scope_manager()
     sm.load_from_config(config)

@@ -8,7 +8,7 @@ from modules.scope.scope_manager import ScopeManager
 logger = logging.getLogger('snooger')
 
 def filter_alive(subdomains: List[str], workspace_dir: str,
-                 scope: ScopeManager = None) -> List[str]:
+                 scope = None) -> List[str]:
     """Filter alive hosts using httpx. Applies scope filtering."""
     if not subdomains:
         return []

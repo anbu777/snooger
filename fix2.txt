@@ -1,0 +1,82 @@
+c:\Users\LENOVO\Documents\snooger\core\event_bus.py:19:58 - error: Expression of type "None" cannot be assigned to parameter of type "Dict[str, Any]"
+c:\Users\LENOVO\Documents\snooger\core\event_bus.py:89:60 - error: Expression of type "None" cannot be assigned to parameter of type "Dict[str, Any]"
+c:\Users\LENOVO\Documents\snooger\core\event_bus.py:107:72 - error: Expression of type "None" cannot be assigned to parameter of type "Dict[str, Any]"
+c:\Users\LENOVO\Documents\snooger\core\event_bus.py:169:50 - error: Expression of type "None" cannot be assigned to parameter of type "Dict[str, Any]"
+c:\Users\LENOVO\Documents\snooger\core\event_bus.py:174:62 - error: Expression of type "None" cannot be assigned to parameter of type "Dict[str, Any]"
+c:\Users\LENOVO\Documents\snooger\core\http_client.py:55:39 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\core\http_client.py:97:50 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\core\http_client.py:133:39 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\core\http_client.py:133:60 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\core\http_client.py:136:42 - error: Expression of type "None" cannot be assigned to parameter of type "int"
+c:\Users\LENOVO\Documents\snooger\core\http_client.py:258:39 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\core\oob_handler.py:32:47 - error: Cannot assign to attribute "_poll_thread" for class "OOBHandler*"
+c:\Users\LENOVO\Documents\snooger\core\rate_limiter.py:87:38 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\core\scope_manager.py:130:40 - error: Argument of type "IPv4Network | IPv6Network" cannot be assigned to parameter "object" of type "IPv4Network" in function "append"
+c:\Users\LENOVO\Documents\snooger\core\scope_manager.py:141:40 - error: Argument of type "IPv4Network | IPv6Network" cannot be assigned to parameter "object" of type "IPv4Network" in function "append"
+c:\Users\LENOVO\Documents\snooger\core\scope_manager.py:256:91 - error: Expression of type "None" cannot be assigned to parameter of type "List[str]"
+c:\Users\LENOVO\Documents\snooger\modules\api\api_tester.py:260:43 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\api\api_tester.py:309:16 - error: "os" is not defined (reportUndefinedVariable)
+c:\Users\LENOVO\Documents\snooger\modules\auth\auth_testing.py:338:55 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\auth\auth_testing.py:339:37 - error: Expression of type "None" cannot be assigned to parameter of type "str"
+c:\Users\LENOVO\Documents\snooger\modules\auth\auth_testing.py:339:60 - error: Expression of type "None" cannot be assigned to parameter of type "str"
+c:\Users\LENOVO\Documents\snooger\modules\business_logic\race_condition.py:48:70 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\business_logic\race_condition.py:172:55 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\business_logic\race_condition.py:173:55 - error: Expression of type "None" cannot be assigned to parameter of type "list[Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:18:65 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:63:76 - error: Argument of type "CaseInsensitiveDict[str] | Unknown" cannot be assigned to parameter "headers" of type "dict[Unknown, Unknown]" in function "_extract_links"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:89:45 - error: Argument of type "_AttributeValue" cannot be assigned to parameter "url" of type "AnyStr@urljoin | None" in function "urljoin"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:99:45 - error: Argument of type "_AttributeValue" cannot be assigned to parameter "url" of type "AnyStr@urljoin | None" in function "urljoin"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:132:48 - error: Cannot access attribute "upper" for class "AttributeValueList"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:133:37 - error: Argument of type "_AttributeValue | None" cannot be assigned to parameter "url" of type "AnyStr@urljoin | None" in function "urljoin"
+c:\Users\LENOVO\Documents\snooger\modules\crawler\web_crawler.py:182:45 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\exploitation\sqlmap_wrapper.py:10:36 - error: Expression of type "None" cannot be assigned to parameter of type "str"
+c:\Users\LENOVO\Documents\snooger\modules\exploitation\sqlmap_wrapper.py:30:21 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\network\dns_enum.py:130:66 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\network\service_scanner.py:106:34 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\network\service_scanner.py:186:37 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\network\vhost_scanner.py:28:32 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\network\vhost_scanner.py:28:61 - error: Expression of type "None" cannot be assigned to parameter of type "str"
+c:\Users\LENOVO\Documents\snooger\modules\network\vhost_scanner.py:135:35 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\post_exploitation\linux_pe.py:106:68 - error: "quote" is not a known attribute of module "..utils" (reportAttributeAccessIssue)
+c:\Users\LENOVO\Documents\snooger\modules\post_exploitation\linux_pe.py:141:72 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\content_discovery.py:70:12 - error: Type "None" is not assignable to return type "str"
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\content_discovery.py:121:31 - error: Cannot assign to attribute "cookies" for class "Session"
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\content_discovery.py:201:53 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\filter_alive.py:11:40 - error: Expression of type "None" cannot be assigned to parameter of type "ScopeManager"
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\filter_alive.py:35:64 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\historical_urls.py:21:60 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\historical_urls.py:47:68 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\historical_urls.py:62:52 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\info_disclosure.py:239:16 - error: "os" is not defined (reportUndefinedVariable)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\parameter_discovery.py:31:64 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain.py:20:58 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain.py:45:54 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain.py:62:60 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain.py:137:56 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain.py:145:9 - error: Argument of type "str" cannot be assigned to parameter "value" of type "None" in function "__setitem__"
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain.py:146:58 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain.py:153:13 - error: Argument of type "str" cannot be assigned to parameter "value" of type "None" in function "__setitem__"
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain_takeover.py:53:60 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\subdomain_takeover.py:75:58 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\tech_detect.py:63:70 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\tech_specific.py:12:66 - error: Expression of type "None" cannot be assigned to parameter of type "str"
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\tech_specific.py:22:54 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\wayback.py:21:52 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\reconnaissance\wayback.py:40:60 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\scanning\cloud_scanner.py:297:46 - error: Expression of type "None" cannot be assigned to parameter of type "List[str]"
+c:\Users\LENOVO\Documents\snooger\modules\scanning\port_scan.py:30:56 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\scanning\port_scan.py:128:55 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\validation\cors_validator.py:8:71 - error: Expression of type "None" cannot be assigned to parameter of type "Session"
+c:\Users\LENOVO\Documents\snooger\modules\validation\sqli_validator.py:127:87 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\validation\xss_validator.py:106:21 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\modules\vulnerability\additional_vulns.py:136:71 - error: Expression of type "None" cannot be assigned to parameter of type "Session"
+c:\Users\LENOVO\Documents\snooger\modules\vulnerability\additional_vulns.py:387:66 - error: Expression of type "None" cannot be assigned to parameter of type "Session"
+c:\Users\LENOVO\Documents\snooger\modules\vulnerability\concurrent_scanner.py:15:37 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\vulnerability\file_upload_tester.py:274:52 - error: Expression of type "None" cannot be assigned to parameter of type "dict[Unknown, Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\vulnerability\file_upload_tester.py:275:52 - error: Expression of type "None" cannot be assigned to parameter of type "list[Unknown]"
+c:\Users\LENOVO\Documents\snooger\modules\vulnerability\nuclei_runner.py:83:62 - error: Expected 3 positional arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\snooger.py:79:18 - error: "run_subdomain_enum" is not defined (reportUndefinedVariable)
+c:\Users\LENOVO\Documents\snooger\snooger.py:151:22 - error: Argument missing for parameter "workspace_dir" (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\snooger.py:206:30 - error: Cannot access attribute "get" for class "List[dict[Unknown, Unknown]]"
+c:\Users\LENOVO\Documents\snooger\snooger.py:208:53 - error: No overloads for "__getitem__" match the provided arguments (reportCallIssue)
+c:\Users\LENOVO\Documents\snooger\snooger.py:208:53 - error: Argument of type "Literal['findings']" cannot be assigned to parameter "s" of type "slice[Any, Any, Any]" in function "__getitem__"

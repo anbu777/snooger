@@ -1,4 +1,5 @@
 {
+  "python.analysis.extraPaths": ["."],
   "python.analysis.typeCheckingMode": "off",
   "python.analysis.diagnosticSeverityOverrides": {
     "reportGeneralTypeIssues": "none",
