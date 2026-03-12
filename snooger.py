@@ -12,7 +12,7 @@ import asyncio
 import logging
 import argparse
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any, Tuple
 
 # ─── Project Path Setup ──────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -115,7 +115,16 @@ async def phase_scanning(target: str, workspace: str, config: dict,
     logger = logging.getLogger('snooger')
     results = {}
 
-    alive_subs = recon_data.get('subdomains', {}).get('alive_subdomains', [target])
+    raw_subdomains = recon_data.get('subdomains', [])
+    alive_subs: List[str] = []
+    if isinstance(raw_subdomains, list):
+        alive_subs = raw_subdomains
+    else:
+        alive_subs = raw_subdomains.get('alive_subdomains', [target])
+    
+    if not alive_subs:
+        alive_subs = [target]
+
 
     # Port scanning
     logger.info(f"Port scanning {len(alive_subs)} targets...")
@@ -179,7 +188,16 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
     logger = logging.getLogger('snooger')
     results = {}
 
-    alive_subs = recon_data.get('subdomains', {}).get('alive_subdomains', [target])
+    raw_subdomains = recon_data.get('subdomains', [])
+    alive_subs: List[str] = []
+    if isinstance(raw_subdomains, list):
+        alive_subs = raw_subdomains
+    else:
+        alive_subs = raw_subdomains.get('alive_subdomains', [target])
+    
+    if not alive_subs:
+        alive_subs = [target]
+
     urls_with_params = crawl_data.get('crawler', {}).get('urls_with_params', [])
     forms = crawl_data.get('crawler', {}).get('forms', [])
     tech_stack = scan_data.get('tech_detect', {}).get('all_technologies', [])
