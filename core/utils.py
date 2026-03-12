@@ -51,14 +51,50 @@ def run_command(cmd: str, timeout: int = 300, cwd: Optional[str] = None,
         else:
             cmd_list = cmd
 
-        proc = subprocess.run(
-            cmd_list,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=cwd,
-            env=env,
-        )
+        import threading
+        import sys
+        
+        stop_spinner = False
+        def spinner():
+            chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+            i = 0
+            # Get just the tool name for display
+            tool_display = cmd_list[0] if cmd_list else "command"
+            sys.stdout.write(f"\033[36m    [~] Running {tool_display} \033[0m")
+            sys.stdout.flush()
+            
+            # Record start time
+            start = time.time()
+            
+            while not stop_spinner:
+                elapsed = int(time.time() - start)
+                sys.stdout.write(f"\r\033[36m    [{chars[i]}] Running {tool_display} ({elapsed}s elapsed) \033[0m")
+                sys.stdout.flush()
+                i = (i + 1) % len(chars)
+                time.sleep(0.1)
+            
+            # Clear spinner line when done
+            sys.stdout.write(f"\r\033[K")
+            sys.stdout.flush()
+
+        # Start spinner thread
+        t = threading.Thread(target=spinner)
+        t.daemon = True
+        t.start()
+
+        try:
+            proc = subprocess.run(
+                cmd_list,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=cwd,
+                env=env,
+            )
+        finally:
+            stop_spinner = True
+            t.join(timeout=1.0)
+
         return proc.stdout, proc.stderr, proc.returncode
 
     except subprocess.TimeoutExpired:
