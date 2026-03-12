@@ -366,6 +366,17 @@ async def run_scan(args, config: dict) -> None:
     state = StateManager(workspace)
     scope = ScopeManager()
 
+    # Save target in metadata for future resume
+    if target:
+        state.set_metadata('target', target)
+    else:
+        # Load target from state if resuming
+        target = state.get_metadata('target')
+        if not target:
+             logger.error("No target found in workspace metadata. Cannot resume.")
+             return
+        args.target = target # Sync back
+
     # Scope setup
     if hasattr(args, 'scope') and args.scope:
         scope.load_from_file(args.scope)
@@ -404,9 +415,32 @@ async def run_scan(args, config: dict) -> None:
     try:
         # Phase 1: Reconnaissance
         print_phase_header(1, "Reconnaissance")
-        recon_data = await phase_recon(target, workspace, config,
-                                       scope, state, ai, executor, context)
+        recon_data = state.get_phase_data('recon_results')
+        
+        # Fallback for legacy workspaces
+        if not recon_data and args.resume:
+            legacy_subs = state.get_phase_data('recon_subdomains')
+            legacy_content = state.get_phase_data('recon_content')
+            if legacy_subs:
+                recon_data = {'subdomains': legacy_subs, 'content': legacy_content}
+                logger.info("Resuming Phase 1: Reconstructed data from legacy state keys.")
+
+        if args.resume and recon_data:
+            logger.info("Resuming Phase 1: Loaded data from state.")
+        else:
+            recon_data = await phase_recon(target, workspace, config,
+                                           scope, state, ai, executor, context)
+            state.save_phase_data('recon_results', recon_data)
+        
         phase_results['recon'] = recon_data
+        
+        # Ensure Phase 1 subdomains are in scope for downstream phases
+        if recon_data.get('subdomains'):
+             subs = recon_data['subdomains']
+             if isinstance(subs, list):
+                 for s in subs: scope.add_target(s)
+             elif isinstance(subs, dict):
+                 for s in subs.get('alive_subdomains', []): scope.add_target(s)
 
         # Plugin: custom recon scanners
         plugin_findings = plugins.run_scanners('recon', target, context)
@@ -415,21 +449,39 @@ async def run_scan(args, config: dict) -> None:
 
         # Phase 2: Scanning
         print_phase_header(2, "Port Scanning & Tech Detection")
-        scan_data = await phase_scanning(target, workspace, config,
-                                          scope, state, ai, executor, recon_data)
+        scan_data = state.get_phase_data('scan_results')
+        if args.resume and scan_data:
+            logger.info("Resuming Phase 2: Loaded data from state.")
+        else:
+            scan_data = await phase_scanning(target, workspace, config,
+                                              scope, state, ai, executor, recon_data)
+            state.save_phase_data('scan_results', scan_data)
+        
         phase_results['scanning'] = scan_data
 
         # Phase 3: Crawling
         print_phase_header(3, "Web Crawling & JS Analysis")
-        crawl_data = await phase_crawl(target, workspace, config,
-                                        scope, state, ai, executor, recon_data)
+        crawl_data = state.get_phase_data('crawl_results')
+        if args.resume and crawl_data:
+            logger.info("Resuming Phase 3: Loaded data from state.")
+        else:
+            crawl_data = await phase_crawl(target, workspace, config,
+                                            scope, state, ai, executor, recon_data)
+            state.save_phase_data('crawl_results', crawl_data)
+        
         phase_results['crawl'] = crawl_data
 
         # Phase 4: Vulnerability Analysis
         print_phase_header(4, "Vulnerability Analysis")
-        vuln_data = await phase_vuln_analysis(target, workspace, config,
-                                              scope, state, ai, executor,
-                                              recon_data, crawl_data, scan_data)
+        vuln_data = state.get_phase_data('vuln_results')
+        if args.resume and vuln_data:
+            logger.info("Resuming Phase 4: Loaded data from state.")
+        else:
+            vuln_data = await phase_vuln_analysis(target, workspace, config,
+                                                  scope, state, ai, executor,
+                                                  recon_data, crawl_data, scan_data)
+            state.save_phase_data('vuln_results', vuln_data)
+        
         phase_results['vuln'] = vuln_data
 
         # Plugin: custom vulnerability scanners
@@ -439,26 +491,50 @@ async def run_scan(args, config: dict) -> None:
 
         # Phase 5: Auth Testing
         print_phase_header(5, "Authentication & Authorization Testing")
-        auth_data = await phase_auth_testing(target, workspace, config,
-                                             state, ai, crawl_data)
+        auth_data = state.get_phase_data('auth_results')
+        if args.resume and auth_data:
+            logger.info("Resuming Phase 5: Loaded data from state.")
+        else:
+            auth_data = await phase_auth_testing(target, workspace, config,
+                                                 state, ai, crawl_data)
+            state.save_phase_data('auth_results', auth_data)
+        
         phase_results['auth'] = auth_data
 
         # Phase 6: Business Logic
         print_phase_header(6, "Business Logic Testing")
-        biz_data = await phase_business_logic(target, workspace, config,
-                                              state, crawl_data)
+        biz_data = state.get_phase_data('biz_results')
+        if args.resume and biz_data:
+            logger.info("Resuming Phase 6: Loaded data from state.")
+        else:
+            biz_data = await phase_business_logic(target, workspace, config,
+                                                  state, crawl_data)
+            state.save_phase_data('biz_results', biz_data)
+        
         phase_results['business'] = biz_data
 
         # Phase 7: Exploitation (skip if --skip-exploit)
         if not getattr(args, 'skip_exploit', False):
             print_phase_header(7, "Exploitation & PoC Generation")
-            exploit_data = await phase_exploitation(target, workspace, config,
-                                                     state, ai, vuln_data)
+            exploit_data = state.get_phase_data('exploit_results')
+            if args.resume and exploit_data:
+                logger.info("Resuming Phase 7: Loaded data from state.")
+            else:
+                exploit_data = await phase_exploitation(target, workspace, config,
+                                                         state, ai, vuln_data)
+                state.save_phase_data('exploit_results', exploit_data)
+            
             phase_results['exploit'] = exploit_data
 
         # Phase 8: Reporting
         print_phase_header(8, "Report Generation")
-        report_data = await phase_reporting(target, workspace, config, state, ai)
+        report_data = state.get_phase_data('report_results')
+        if args.resume and report_data:
+            logger.info("Resuming Phase 8: Loaded data from state.")
+        else:
+            report_data = await phase_reporting(target, workspace, config, state, ai)
+            state.save_phase_data('report_results', report_data)
+        
         phase_results['report'] = report_data
 
     except KeyboardInterrupt:
