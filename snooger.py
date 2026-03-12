@@ -577,7 +577,8 @@ async def run_scan(args, config: dict) -> None:
         if not getattr(args, 'skip_exploit', False):
             print_phase_header(7, "Exploitation & PoC Generation")
             exploit_data = state.get_phase_data('exploit_results')
-            if args.resume and exploit_data:
+            # Re-run if empty or if we have new findings to process
+            if args.resume and exploit_data and (exploit_data.get('chains') or exploit_data.get('pocs')):
                 logger.info("Resuming Phase 7: Loaded data from state.")
             else:
                 exploit_data = await phase_exploitation(target, workspace, config,
@@ -620,9 +621,12 @@ async def run_scan(args, config: dict) -> None:
     # ─── Summary ──────────────────────────────────────────────────
     # Priority: report_data summary > database findings_count
     findings_count = 0
-    if phase_results.get('report') and 'summary' in phase_results['report']:
-        findings_count = phase_results['report']['summary'].get('total_findings', 0)
-    else:
+    if phase_results.get('report'):
+        # report_data is {'report': report_dict, 'report_files': [...]}
+        report_obj = phase_results['report'].get('report', {})
+        findings_count = report_obj.get('summary', {}).get('total_findings', 0)
+    
+    if findings_count == 0:
         findings_count = state.findings_count() if hasattr(state, 'findings_count') else 0
 
     summary = {
