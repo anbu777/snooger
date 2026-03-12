@@ -15,7 +15,7 @@ tools:
   nuclei: "nuclei"
   nmap: "nmap"
   masscan: "masscan"
-  testssl: "testssl.sh"
+  testssl: "testssl"
   # Fuzzing
   ffuf: "ffuf"
   gobuster: "gobuster"
@@ -156,3 +156,12 @@ profiles:
     max_crawl_pages: 500
     skip_post: false
     async_concurrent: 50
+  aggressive:
+    nuclei_severity: "critical,high,medium,low,info"
+    ffuf_threads: 40
+    ffuf_delay: 0.1
+    max_subdomains: 1000
+    max_crawl_pages: 1000
+    skip_post: false
+    async_concurrent: 100
+    ai_priority: "smart"

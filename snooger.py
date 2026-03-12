@@ -501,7 +501,7 @@ Examples:
     parser.add_argument('-t', '--target', help='Target domain or URL')
 
     # Profiles
-    parser.add_argument('-p', '--profile', choices=['quick', 'stealth', 'thorough'],
+    parser.add_argument('-p', '--profile', choices=['quick', 'stealth', 'thorough', 'aggressive'],
                         default=None, help='Scan profile (default: thorough)')
 
     # Scope
