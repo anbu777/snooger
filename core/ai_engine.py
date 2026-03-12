@@ -275,6 +275,32 @@ Respond with JSON: {{"verdict": "true_positive|false_positive|uncertain", "confi
             finding['ai_confidence'] = 50
         return finding
 
+    def analyze_vulnerability_chains(self, findings: list) -> list:
+        """AI-powered exploit chain detection."""
+        if self.mode == 'off' or not findings:
+            return []
+        
+        vuln_text = json.dumps([{
+            'type': f.get('type', 'unknown'),
+            'url': f.get('url', '')[:100],
+            'info': f.get('evidence', '')[:200]
+        } for f in findings], indent=2)
+
+        prompt = f"""You are a master red teamer. Analyze these security findings and identify potential "Exploit Chains".
+A chain combines multiple low/medium findings into a high/critical impact attack (e.g., SSRF + Internal API = RCE).
+
+Findings:
+{vuln_text}
+
+Return a JSON array of potential chains. Each chain must have:
+"chain_name", "description", "impact" (high/critical), "steps" (list of findings used), "exploit_path" (short explanation).
+
+Return ONLY valid JSON array."""
+
+        result = self.ask(prompt, task_type='summary')
+        parsed = self._parse_json_response(result)
+        return parsed if isinstance(parsed, list) else []
+
     def generate_poc_writeup(self, finding: dict) -> str:
         """Generate a professional PoC writeup for bug bounty submission."""
         if self.mode == 'off':

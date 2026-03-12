@@ -249,6 +249,81 @@ def test_idor_http_methods(url: str, id_value: str, auth=None) -> List[dict]:
 
     return findings
 
+# ─── Mass Assignment & Parameter Pollution ──────────────────────────────────
+
+SUSPICIOUS_PARAMS = [
+    'admin', 'is_admin', 'role', 'privilege', 'permissions', 'internal',
+    'debug', 'authorized', 'verified', 'root', 'superuser', 'owner',
+    'balance', 'credits', 'points', 'user_id', 'group_id'
+]
+
+def test_mass_assignment(url: str, session: requests.Session, rl) -> List[dict]:
+    """
+    Test for Mass Assignment by adding administrative parameters to the request.
+    Works best on POST/PUT endpoints.
+    """
+    findings = []
+    # Identify as a likely writable endpoint
+    if not any(kw in url.lower() for kw in ['update', 'edit', 'profile', 'set', 'config', 'save', 'user']):
+        return findings
+
+    for param in SUSPICIOUS_PARAMS:
+        for val in ['true', '1', 'admin', 'superuser']:
+            try:
+                rl.wait(url)
+                # Test in JSON body (common for APIs)
+                resp = session.post(url, json={param: val}, timeout=10, verify=False)
+                if resp.status_code in (200, 201):
+                    # Check if the parameter is reflected in the response (indicator of acceptance)
+                    if f'"{param}":' in resp.text:
+                        findings.append({
+                            'type': 'potential_mass_assignment',
+                            'url': url,
+                            'parameter': param,
+                            'value': val,
+                            'severity': 'medium',
+                            'evidence': f"Endpoint accepted administrative parameter '{param}' in POST body",
+                            'impact': 'Attacker may elevate privileges or modify protected fields'
+                        })
+                        break
+            except Exception:
+                pass
+    return findings
+
+def test_parameter_pollution(url: str, session: requests.Session, rl) -> List[dict]:
+    """Test for HTTP Parameter Pollution (HPP)."""
+    findings = []
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    
+    if not params:
+        return findings
+
+    base_url = url.split('?')[0]
+    for param_name, values in params.items():
+        # Duplicate the parameter with a different value
+        test_params = params.copy()
+        test_params[param_name] = values + ['snooger_test']
+        test_url = f"{base_url}?{urlencode(test_params, doseq=True)}"
+        
+        try:
+            rl.wait(base_url)
+            resp = session.get(test_url, timeout=10, verify=False)
+            # If the server behaves differently or shows internal error, it might be vulnerable
+            if resp.status_code == 500:
+                 findings.append({
+                    'type': 'parameter_pollution_risk',
+                    'url': test_url,
+                    'parameter': param_name,
+                    'severity': 'low',
+                    'evidence': "Server returned 500 Internal Server Error when parameter was duplicated",
+                    'impact': 'Logic manipulation or WAF bypass potential'
+                })
+        except Exception:
+            pass
+            
+    return findings
+
 def extract_ids_from_urls(urls: List[str]) -> List[Tuple[str, str, str]]:
     """
     Extract (url, id_value, id_type) tuples from URL list.
@@ -318,6 +393,14 @@ def scan_idor(auth, urls: List[str], workspace_dir: str) -> List[dict]:
                 all_findings.extend(header_findings)
             except Exception as e:
                 logger.error(f"IDOR header test error: {e}")
+
+    # New: Mass Assignment & HPP
+    for url in urls[:20]:
+        try:
+            all_findings.extend(test_mass_assignment(url, session, rl))
+            all_findings.extend(test_parameter_pollution(url, session, rl))
+        except Exception:
+            pass
 
     # Deduplicate
     seen = set()

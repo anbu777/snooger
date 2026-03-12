@@ -333,6 +333,26 @@ async def phase_exploitation(target: str, workspace: str, config: dict,
 
     logger.info(f"Analyzing {len(all_findings)} findings for exploit chains...")
     chains = detect_chains(all_findings)
+    
+    # New: AI-powered chain detection
+    if ai:
+        logger.info("Running AI chain engine...")
+        ai_chains = ai.analyze_vulnerability_chains(all_findings)
+        if ai_chains:
+            for ac in ai_chains:
+                ac['ai_generated'] = True
+                chains.append(ac)
+
+    # New: Secret validation
+    secrets = [f for f in all_findings if f.get('type') == 'secret']
+    if secrets:
+        from modules.exploitation.secret_validator import run_secret_validation
+        validated_secrets = run_secret_validation(secrets)
+        # Update findings with validation results
+        for vs in validated_secrets:
+            for f in all_findings:
+                if f.get('value') == vs.get('value'):
+                    f.update(vs)
 
     if chains:
         logger.warning(f"Found {len(chains)} potential exploit chains!")

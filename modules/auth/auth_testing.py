@@ -334,6 +334,68 @@ def test_forceful_browsing(base_url: str, crawler_results: dict,
 
     return findings
 
+# ─── Session Security & Fixation ─────────────────────────────────────────────
+
+def test_session_fixation(login_url: str, user_field: str = 'username', 
+                         pass_field: str = 'password', auth=None) -> dict:
+    """
+    Test if the session ID changes after authentication.
+    """
+    session = requests.Session()
+    session.headers['User-Agent'] = random_user_agent()
+    rl = get_rate_limiter()
+    
+    finding = {}
+    try:
+        # Step 1: Get pre-login session
+        rl.wait(login_url)
+        resp1 = session.get(login_url, timeout=10, verify=False)
+        pre_login_cookies = session.cookies.get_dict()
+        
+        # Step 2: Login attempt
+        rl.wait(login_url)
+        resp2 = session.post(login_url, data={user_field: 'test', pass_field: 'test'}, 
+                            timeout=10, verify=False)
+        post_login_cookies = session.cookies.get_dict()
+        
+        for name, value in pre_login_cookies.items():
+            if name in post_login_cookies and post_login_cookies[name] == value:
+                if any(k in name.lower() for k in ['sess', 'auth', 'id', 'token']):
+                    finding = {
+                        'type': 'session_fixation_risk',
+                        'severity': 'medium',
+                        'cookie_name': name,
+                        'evidence': f"Session cookie '{name}' did not change after login attempt",
+                        'impact': 'Attacker can pre-set a session ID for a victim'
+                    }
+    except Exception as e:
+        logger.debug(f"Session fixation test error: {e}")
+        
+    return finding
+
+def analyze_form_security(url: str, form_html: str) -> List[dict]:
+    """Analyze form HTML for security issues (CSRF, sensitive fields over GET)."""
+    findings = []
+    if 'method="get"' in form_html.lower() or "method='get'" in form_html.lower():
+        if any(p in form_html.lower() for p in ['password', 'token', 'secret', 'key']):
+            findings.append({
+                'type': 'sensitive_data_in_get_form',
+                'severity': 'high',
+                'url': url,
+                'evidence': 'Sensitive fields found in a GET form'
+            })
+            
+    if 'type="hidden"' in form_html.lower():
+        if not any(kw in form_html.lower() for kw in ['csrf', 'token', 'xsrf', '_token']):
+            findings.append({
+                'type': 'potential_missing_csrf_protection',
+                'severity': 'medium',
+                'url': url,
+                'evidence': 'Form contains hidden fields but no obvious CSRF token'
+            })
+            
+    return findings
+
 def run_auth_tests(base_url: str, workspace_dir: str,
                    auth=None, crawler_results = None,
                    login_url = None, jwt_token = None) -> dict:
@@ -364,8 +426,35 @@ def run_auth_tests(base_url: str, workspace_dir: str,
         fb_findings = test_forceful_browsing(base_url, crawler_results, auth)
         results['forceful_browsing'] = fb_findings
 
+    # Session fixation
+    if login_url:
+        fixation = test_session_fixation(login_url)
+        if fixation:
+            results['session_fixation'] = fixation
+
+    # Cookie security attributes (if we have an active session)
+    if auth and auth.session.cookies:
+        cookies_jar = auth.session.cookies
+        for cookie in cookies_jar:
+            if any(k in cookie.name.lower() for k in ['sess', 'auth', 'id', 'token']):
+                missing = []
+                if not cookie.secure: missing.append('Secure')
+                if not cookie.has_nonstandard_attr('httponly') and not getattr(cookie, 'httponly', False):
+                    # Requests cookiejar handling for httponly is tricky, check _rest
+                    if 'httponly' not in [k.lower() for k in cookie._rest.keys()] and not getattr(cookie, 'httponly', False):
+                        missing.append('HttpOnly')
+                
+                if missing:
+                    results['oauth_findings'].append({ # Reusing a list or adding new category
+                        'type': 'insecure_cookie_attributes',
+                        'severity': 'low',
+                        'cookie': cookie.name,
+                        'missing_attributes': missing,
+                        'evidence': f"Cookie '{cookie.name}' missing flags: {', '.join(missing)}"
+                    })
+
     total = (len(results['jwt_findings']) + len(results['oauth_findings']) +
-             len(results['forceful_browsing']))
+             len(results['forceful_browsing']) + (1 if results.get('session_fixation') else 0))
     if results.get('brute_force', {}).get('vulnerable'):
         total += 1
 
