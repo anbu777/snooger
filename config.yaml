@@ -1,54 +1,78 @@
+# ═══════════════════════════════════════════════════════════
+# Snooger v3.0 — Professional Penetration Testing Framework
+# Configuration File
+# ═══════════════════════════════════════════════════════════
+
 tools:
+  # Reconnaissance
   subfinder: "subfinder"
   amass: "amass"
   assetfinder: "assetfinder"
   dnsx: "dnsx"
   httpx: "httpx"
+  massdns: "massdns"
+  # Scanning
   nuclei: "nuclei"
   nmap: "nmap"
-  sqlmap: "sqlmap"
-  ffuf: "ffuf"
-  whatweb: "whatweb"
-  curl: "curl"
-  git: "git"
-  wpscan: "wpscan"
-  xsstrike: "xsstrike"
-  commix: "commix"
+  masscan: "masscan"
   testssl: "testssl.sh"
-  arjun: "arjun"
+  # Fuzzing
+  ffuf: "ffuf"
   gobuster: "gobuster"
   dirsearch: "dirsearch"
+  arjun: "arjun"
+  # Exploitation
+  sqlmap: "sqlmap"
+  xsstrike: "xsstrike"
+  commix: "commix"
+  # Takeover
   subjack: "subjack"
   subzy: "subzy"
+  # Historical
   gau: "gau"
   waybackurls: "waybackurls"
+  # CMS
+  wpscan: "wpscan"
+  # OOB
   interactsh_client: "interactsh-client"
+  # General
+  curl: "curl"
+  git: "git"
+  jq: "jq"
 
 ai:
-  mode: "auto"
-  provider: "ollama"
-  deepseek:
-    api_key: "${DEEPSEEK_API_KEY}"
-    model: "deepseek-chat"
-  huggingface:
-    api_token: "${HUGGINGFACE_API_TOKEN}"
-    model: "meta-llama/Llama-2-7b-chat-hf"
+  mode: "auto"  # auto | smart | light | off
+  primary_provider: "ollama"
+  fallback_chain: ["groq", "deepseek"]  # try in order if primary fails
   ollama:
     model_smart: "llama3.2"
     model_light: "tinyllama"
     host: "http://localhost:11434"
+    timeout: 120
+  groq:
+    api_key: "${GROQ_API_KEY}"
+    model: "llama3-8b-8192"
+    max_tokens: 4096
+    timeout: 30
+  deepseek:
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: "deepseek-chat"
+    max_tokens: 2000
+    timeout: 60
 
 rate_limit:
-  requests_per_second: 5
+  requests_per_second: 10
   delay_between_phases: 2
   adaptive_delay: true
   max_retries: 3
+  backoff_factor: 2.0
 
 stealth:
   use_fake_useragent: true
   rotate_useragent: true
-  random_delay_min: 0.5
-  random_delay_max: 2.0
+  random_delay_min: 0.3
+  random_delay_max: 1.5
+  jitter: true
 
 proxy:
   enabled: false
@@ -63,27 +87,72 @@ interactsh:
   token: "${INTERACTSH_TOKEN}"
   enabled: false
 
+notifications:
+  telegram:
+    enabled: false
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+    min_severity: "high"
+  discord:
+    enabled: false
+    webhook_url: "${DISCORD_WEBHOOK_URL}"
+    min_severity: "high"
+  webhook:
+    enabled: false
+    url: "${CUSTOM_WEBHOOK_URL}"
+    min_severity: "critical"
+
+platform:
+  hackerone:
+    api_username: "${HACKERONE_API_USERNAME}"
+    api_token: "${HACKERONE_API_TOKEN}"
+    auto_submit: false
+    draft_mode: true
+  bugcrowd:
+    api_token: "${BUGCROWD_API_TOKEN}"
+    auto_submit: false
+    draft_mode: true
+
+async:
+  max_concurrent_scans: 20
+  max_concurrent_requests: 50
+  thread_pool_size: 10
+
+plugins:
+  enabled: true
+  directory: "plugins"
+  autoload: true
+
+seclists:
+  auto_download: true
+  path: "/usr/share/seclists"
+  fallback_path: "/opt/seclists"
+
 workspace: "workspace"
 
 profiles:
   quick:
-    skip_scan: false
-    skip_post: true
     nuclei_severity: "critical,high"
     ffuf_threads: 20
     ffuf_delay: 1.0
     max_subdomains: 50
-  stealth:
-    skip_scan: false
+    max_crawl_pages: 100
     skip_post: true
+    async_concurrent: 30
+  stealth:
     nuclei_severity: "critical,high,medium"
     ffuf_threads: 5
     ffuf_delay: 3.0
     max_subdomains: 100
+    max_crawl_pages: 200
+    skip_post: true
+    async_concurrent: 5
+    requests_per_second: 2
   thorough:
-    skip_scan: false
-    skip_post: false
     nuclei_severity: "critical,high,medium,low"
     ffuf_threads: 30
-    ffuf_delay: 0.5
+    ffuf_delay: 0.3
     max_subdomains: 500
+    max_crawl_pages: 500
+    skip_post: false
+    async_concurrent: 50

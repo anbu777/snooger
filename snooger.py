@@ -1,697 +1,610 @@
-#!/usr/bin/env python3
 """
-Snooger v2.0 - Professional All-in-One Penetration Testing Framework
-Designed for bug bounty platforms: HackerOne, Bugcrowd, Intigriti
+Snooger v3.0 — Professional Penetration Testing Framework
+Main orchestrator with async execution, plugin system, and event bus.
+Target: Kali Linux
 """
 import os
 import sys
-import argparse
-import json
 import time
+import json
+import signal
+import asyncio
 import logging
+import argparse
 from datetime import datetime
+from typing import Optional
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# ─── Project Path Setup ──────────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
 
-from core.config_loader import load_config, apply_profile
-from core.logger import setup_logger, get_logger
-from core.dependency_checker import check_dependencies, print_dependency_report
+from core.config_loader import load_config, apply_profile, get_tool_path
 from core.ai_engine import AIEngine
-from core import interactive
-from core.rate_limiter import init_rate_limiter
 from core.state_manager import StateManager
-from core.utils import sanitize_domain, write_json
+from core.scope_manager import ScopeManager
+from core.rate_limiter import init_rate_limiter
+from core.event_bus import get_event_bus, emit
+from core.plugin_loader import init_plugins, ScanContext
+from core.async_executor import AsyncExecutor, run_async
+from core.http_client import AsyncHTTPClient, SyncHTTPClient
+from core.notifications import init_notifications
+from core.interactive import (
+    print_banner, print_phase_header, print_finding,
+    print_summary_table, confirm_action, get_user_input,
+    get_user_choice, create_progress, console, HAS_RICH
+)
+from core.utils import (
+    run_command, save_raw_output, write_json, load_json_file,
+    random_user_agent, check_tool, sanitize_domain, sanitize_url
+)
 
-BANNER = r"""
- ░▒▓███████▓▒░▒▓███████▓▒░ ░▒▓██████▓▒░ ░▒▓██████▓▒░ ░▒▓██████▓▒░░▒▓████████▓▒░▒▓███████▓▒░
-░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
-░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
- ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒▒▓███▓▒░▒▓██████▓▒░ ░▒▓███████▓▒░
-       ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
-       ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░
-░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░ ░▒▓██████▓▒░ ░▒▓██████▓▒░░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░
+VERSION = "3.0.0"
 
-         v2.0 Professional | Bug Bounty Edition | HackerOne & Bugcrowd Ready
-"""
+# ─── Logging ──────────────────────────────────────────────────────────
+def setup_logging(workspace_dir: str, verbose: bool = False) -> logging.Logger:
+    logger = logging.getLogger('snooger')
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description='Snooger v2.0 - Professional Penetration Testing Framework',
-        formatter_class=argparse.RawDescriptionHelpFormatter
+    # Console handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG if verbose else logging.INFO)
+    fmt = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%H:%M:%S')
+    ch.setFormatter(fmt)
+    logger.addHandler(ch)
+
+    # File handler
+    os.makedirs(workspace_dir, exist_ok=True)
+    fh = logging.FileHandler(os.path.join(workspace_dir, 'snooger.log'), encoding='utf-8')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    logger.addHandler(fh)
+
+    return logger
+
+
+# ─── Phase Execution Functions ────────────────────────────────────────
+
+async def phase_recon(target: str, workspace: str, config: dict,
+                      scope, state, ai, executor, context) -> dict:
+    """Phase 1: Reconnaissance — subdomain enumeration, alive check, tech detection."""
+    from modules.reconnaissance.subdomain import run_subdomain_enum
+    from modules.reconnaissance.content_discovery import run_content_discovery
+
+    logger = logging.getLogger('snooger')
+    results = {}
+
+    # Subdomain enumeration
+    logger.info("Starting subdomain enumeration...")
+    subdomains = run_subdomain_enum(target, workspace, config)
+    results['subdomains'] = subdomains
+    state.save_phase_data('recon_subdomains', subdomains)
+
+    # Content discovery on main target
+    logger.info("Starting content discovery...")
+    try:
+        content = run_content_discovery(
+            f"https://{target}" if not target.startswith('http') else target,
+            workspace, config
+        )
+        results['content'] = content
+        state.save_phase_data('recon_content', content)
+    except Exception as e:
+        logger.warning(f"Content discovery error: {e}")
+        results['content'] = {}
+
+    emit('phase_completed', {'phase': 'recon', 'results_summary': {
+        'subdomains_found': len(subdomains.get('all_subdomains', [])),
+    }}, source='recon')
+
+    return results
+
+
+async def phase_scanning(target: str, workspace: str, config: dict,
+                         scope, state, ai, executor, recon_data: dict) -> dict:
+    """Phase 2: Port Scanning & Technology Detection."""
+    from modules.scanning.port_scan import run_port_scan
+    from modules.scanning.tech_detect import run_tech_detection
+
+    logger = logging.getLogger('snooger')
+    results = {}
+
+    alive_subs = recon_data.get('subdomains', {}).get('alive_subdomains', [target])
+
+    # Port scanning
+    logger.info(f"Port scanning {len(alive_subs)} targets...")
+    scan_results = run_port_scan(alive_subs[:50], workspace, config)
+    results['port_scan'] = scan_results
+    state.save_phase_data('port_scan', scan_results)
+
+    # Tech detection
+    logger.info("Running technology detection...")
+    tech_results = run_tech_detection(alive_subs[:50], workspace, config)
+    results['tech_detect'] = tech_results
+    state.save_phase_data('tech_detect', tech_results)
+
+    emit('phase_completed', {'phase': 'scanning'}, source='scanning')
+    return results
+
+
+async def phase_crawl(target: str, workspace: str, config: dict,
+                      scope, state, ai, executor, recon_data: dict) -> dict:
+    """Phase 3: Web Crawling & JavaScript Analysis."""
+    from modules.crawler.web_crawler import run_crawler
+    from modules.javascript.js_analyzer import analyze_js_files
+
+    logger = logging.getLogger('snooger')
+    results = {}
+
+    target_url = f"https://{target}" if not target.startswith('http') else target
+
+    # Crawl the target
+    logger.info("Starting web crawler...")
+    crawl = run_crawler(target_url, workspace, config, scope)
+    results['crawler'] = crawl
+    state.save_phase_data('crawler', crawl)
+
+    # JS analysis
+    js_files = crawl.get('js_files', [])
+    if js_files:
+        logger.info(f"Analyzing {len(js_files)} JavaScript files...")
+        js_results = analyze_js_files(js_files, workspace, config)
+        results['js_analysis'] = js_results
+        state.save_phase_data('js_analysis', js_results)
+
+        secrets = js_results.get('secrets', [])
+        if secrets:
+            logger.warning(f"Found {len(secrets)} secrets in JavaScript files!")
+            for s in secrets[:5]:
+                emit('secret_found', s, source='js_analyzer')
+
+    emit('phase_completed', {'phase': 'crawl'}, source='crawl')
+    return results
+
+
+async def phase_vuln_analysis(target: str, workspace: str, config: dict,
+                              scope, state, ai, executor,
+                              recon_data: dict, crawl_data: dict,
+                              scan_data: dict) -> dict:
+    """Phase 4: Vulnerability Analysis — Nuclei + Active Testing."""
+    from modules.vulnerability.nuclei_runner import run_nuclei_scan
+    from modules.vulnerability.active_vulns import run_active_vulnerability_tests
+
+    logger = logging.getLogger('snooger')
+    results = {}
+
+    alive_subs = recon_data.get('subdomains', {}).get('alive_subdomains', [target])
+    urls_with_params = crawl_data.get('crawler', {}).get('urls_with_params', [])
+    forms = crawl_data.get('crawler', {}).get('forms', [])
+    tech_stack = scan_data.get('tech_detect', {}).get('all_technologies', [])
+
+    # Nuclei scan
+    logger.info("Running Nuclei vulnerability scanner...")
+    nuclei_results = run_nuclei_scan(alive_subs[:30], workspace, config, tech_stack)
+    results['nuclei'] = nuclei_results
+    state.save_phase_data('nuclei', nuclei_results)
+
+    # Active vulnerability tests
+    if urls_with_params:
+        logger.info(f"Running active vulnerability tests on {len(urls_with_params)} URLs...")
+        active_results = run_active_vulnerability_tests(
+            urls_with_params, workspace, auth=None,
+            interactsh_url=config.get('interactsh', {}).get('server'),
+            forms=forms
+        )
+        results['active_vulns'] = active_results
+        state.save_phase_data('active_vulns', active_results)
+
+        # Emit findings
+        for vuln_type, findings in active_results.items():
+            for finding in findings:
+                severity = finding.get('severity', 'info')
+                event_name = 'critical_alert' if severity == 'critical' else 'finding_discovered'
+                emit(event_name, finding, source=vuln_type)
+
+    # AI prioritization
+    if ai and nuclei_results.get('findings'):
+        logger.info("AI prioritizing vulnerability findings...")
+        prioritized = ai.prioritize_vulnerabilities(nuclei_results['findings'])
+        results['ai_prioritized'] = prioritized
+
+    emit('phase_completed', {'phase': 'vuln_analysis'}, source='vuln_analysis')
+    return results
+
+
+async def phase_auth_testing(target: str, workspace: str, config: dict,
+                             state, ai, crawl_data: dict) -> dict:
+    """Phase 5: Authentication & Authorization Testing."""
+    from modules.auth.auth_testing import run_auth_tests
+
+    logger = logging.getLogger('snooger')
+
+    target_url = f"https://{target}" if not target.startswith('http') else target
+
+    logger.info("Running authentication tests...")
+    auth_results = run_auth_tests(
+        target_url, workspace,
+        crawler_results=crawl_data.get('crawler', {})
     )
-    parser.add_argument('domain', help='Target domain or URL (e.g., example.com)')
-    parser.add_argument('--scope-file', help='Scope file (plain text, Bugcrowd/HackerOne JSON)')
-    parser.add_argument('--scope', help='Additional in-scope IPs/CIDRs (comma-separated)')
-    parser.add_argument('--out-of-scope', help='Out-of-scope domains (comma-separated)')
-    parser.add_argument('--config', default='config.yaml', help='Config file')
-    parser.add_argument('--profile', choices=['quick', 'stealth', 'thorough'],
-                        help='Scan profile preset')
-    parser.add_argument('--rate-limit', type=float, help='Requests per second (overrides config)')
-    parser.add_argument('--skip-recon', action='store_true')
-    parser.add_argument('--skip-scan', action='store_true')
-    parser.add_argument('--skip-vuln', action='store_true')
-    parser.add_argument('--skip-exploit', action='store_true')
-    parser.add_argument('--skip-post', action='store_true')
-    parser.add_argument('--skip-api', action='store_true')
-    parser.add_argument('--skip-js', action='store_true')
-    parser.add_argument('--resume', action='store_true', help='Resume incomplete scan')
-    parser.add_argument('--targets-file', help='File with multiple targets (one per line)')
-    parser.add_argument('--output-dir', help='Custom output directory')
-    parser.add_argument('--no-ai', action='store_true', help='Disable AI features')
-    parser.add_argument('--severity', default='critical,high,medium',
-                        help='Nuclei severity filter (default: critical,high,medium)')
-    parser.add_argument('--monitor', action='store_true',
-                        help='Enable continuous monitoring mode after scan')
-    parser.add_argument('--monitor-interval', type=int, default=60,
-                        help='Monitor rescan interval in minutes (default: 60)')
-    parser.add_argument('--skip-cloud', action='store_true',
-                        help='Skip cloud/S3/Azure/GCS infrastructure scan')
-    parser.add_argument('--skip-upload', action='store_true',
-                        help='Skip file upload testing')
-    parser.add_argument('--skip-race', action='store_true',
-                        help='Skip race condition testing')
-    parser.add_argument('--jwt-token', help='JWT token to analyze for vulnerabilities')
-    parser.add_argument('--login-url', help='Login URL for brute-force protection testing')
-    return parser.parse_args()
+    state.save_phase_data('auth_testing', auth_results)
 
-def setup_workspace(target: str, base_dir: str, custom_dir: str = None) -> str:
-    safe = target.replace('/', '_').replace(':', '_').replace('.', '_')
-    target_dir = custom_dir or os.path.join(base_dir, safe)
-    for subdir in ['raw_logs/recon', 'raw_logs/scan', 'raw_logs/vuln',
-                   'raw_logs/exploit', 'raw_logs/post_exploit',
-                   'raw_logs/javascript', 'submissions']:
-        os.makedirs(os.path.join(target_dir, subdir), exist_ok=True)
-    return target_dir
+    emit('phase_completed', {'phase': 'auth_testing'}, source='auth')
+    return auth_results
 
-def main():
-    print(BANNER)
-    args = parse_args()
-    start_time = datetime.utcnow().isoformat()
 
-    # ─── Multiple targets mode ─────────────────────────────────────
-    if args.targets_file:
-        if not os.path.exists(args.targets_file):
-            print(f"[!] Targets file not found: {args.targets_file}")
-            sys.exit(1)
-        with open(args.targets_file) as f:
-            targets = [l.strip() for l in f if l.strip() and not l.startswith('#')]
-        print(f"[*] Multiple targets mode: {len(targets)} targets from {args.targets_file}")
-        results_summary = []
-        for i, target in enumerate(targets, 1):
-            print(f"\n{'='*60}")
-            print(f"  TARGET {i}/{len(targets)}: {target}")
-            print(f"{'='*60}")
-            # Run each target as its own scan using subprocess
-            import subprocess, shlex
-            cmd = [sys.executable, __file__, target] + [
-                a for a in sys.argv[1:]
-                if '--targets-file' not in a and target not in a
-            ]
-            ret = subprocess.run(cmd, timeout=7200)
-            results_summary.append({'target': target, 'exit_code': ret.returncode})
-        print(f"\n[*] All {len(targets)} targets complete.")
-        for r in results_summary:
-            status = "✅" if r['exit_code'] == 0 else "❌"
-            print(f"  {status} {r['target']}")
-        return
+async def phase_business_logic(target: str, workspace: str, config: dict,
+                               state, crawl_data: dict) -> dict:
+    """Phase 6: Business Logic Testing — IDOR, Race Conditions."""
+    from modules.business_logic.idor import run_idor_tests
 
-    # Validate target
-    try:
-        domain = sanitize_domain(args.domain)
-    except ValueError as e:
-        print(f"[!] Invalid target: {e}")
-        sys.exit(1)
+    logger = logging.getLogger('snooger')
+    results = {}
 
-    # Load config
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.config)
-    try:
-        config = load_config(config_path)
-    except FileNotFoundError:
-        print(f"[!] Config file not found: {config_path}")
-        sys.exit(1)
+    urls = crawl_data.get('crawler', {}).get('urls_with_params', [])
+    if urls:
+        logger.info("Running IDOR tests...")
+        idor_results = run_idor_tests(urls[:20], workspace)
+        results['idor'] = idor_results
+        state.save_phase_data('idor', idor_results)
+
+    emit('phase_completed', {'phase': 'business_logic'}, source='business_logic')
+    return results
+
+
+async def phase_exploitation(target: str, workspace: str, config: dict,
+                             state, ai, vuln_data: dict) -> dict:
+    """Phase 7: Exploitation — Chain Detection & PoC Generation."""
+    from modules.exploitation.chain_engine import detect_exploit_chains
+
+    logger = logging.getLogger('snooger')
+
+    all_findings = []
+    for phase_name in ['nuclei', 'active_vulns', 'idor', 'auth_testing']:
+        phase_data = state.get_phase_data(phase_name) or {}
+        if isinstance(phase_data, dict):
+            for key, val in phase_data.items():
+                if isinstance(val, list):
+                    all_findings.extend(val)
+
+    if not all_findings:
+        logger.info("No findings for exploitation phase")
+        return {}
+
+    logger.info(f"Analyzing {len(all_findings)} findings for exploit chains...")
+    chains = detect_exploit_chains(all_findings)
+
+    if chains:
+        logger.warning(f"Found {len(chains)} potential exploit chains!")
+        for chain in chains:
+            emit('chain_detected', chain, source='chain_engine')
+
+    # AI PoC generation for critical findings
+    critical = [f for f in all_findings if f.get('severity') == 'critical']
+    pocs = []
+    if ai and critical:
+        logger.info(f"Generating AI PoC writeups for {len(critical[:5])} critical findings...")
+        for finding in critical[:5]:
+            poc = ai.generate_poc_writeup(finding)
+            if poc:
+                pocs.append({'finding': finding, 'poc': poc})
+
+    results = {'chains': chains, 'pocs': pocs}
+    state.save_phase_data('exploitation', results)
+
+    emit('phase_completed', {'phase': 'exploitation'}, source='exploitation')
+    return results
+
+
+async def phase_reporting(target: str, workspace: str, config: dict,
+                          state, ai) -> dict:
+    """Phase 8: Report Generation."""
+    from modules.reporting.json_builder import build_final_report
+    from modules.reporting.ai_summary import generate_reports
+
+    logger = logging.getLogger('snooger')
+
+    logger.info("Building final report...")
+    report = build_final_report(workspace, target, state)
+
+    logger.info("Generating AI summary and reports...")
+    reports = generate_reports(workspace, report, ai, config)
+
+    emit('phase_completed', {'phase': 'reporting'}, source='reporting')
+    return {'report': report, 'report_files': reports}
+
+
+# ─── Main Orchestrator ────────────────────────────────────────────────
+
+async def run_scan(args, config: dict) -> None:
+    """Main async scan orchestrator."""
+    target = args.target
+    logger = logging.getLogger('snooger')
 
     # Apply profile
     if args.profile:
         config = apply_profile(config, args.profile)
 
-    # Override rate limit
-    if args.rate_limit:
-        config.setdefault('rate_limit', {})['requests_per_second'] = args.rate_limit
-
     # Setup workspace
-    workspace_base = config.get('workspace', 'workspace')
-    target_dir = setup_workspace(domain, workspace_base, args.output_dir)
+    domain = target.replace('https://', '').replace('http://', '').split('/')[0]
+    workspace = os.path.join(
+        config.get('workspace', 'workspace'),
+        f"{domain}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
+    os.makedirs(workspace, exist_ok=True)
+    logger.info(f"Workspace: {workspace}")
 
-    # Setup logging
-    logger = setup_logger(target_dir)
-    logger.info(f"Snooger v2.0 starting for target: {domain}")
-    logger.info(f"Workspace: {target_dir}")
+    # Initialize components
+    emit('scan_started', {'target': target, 'workspace': workspace}, source='main')
 
-    # Init rate limiter
-    rl = init_rate_limiter(config)
-
-    # Init state manager
-    state = StateManager(target_dir, domain)
-    if args.resume:
-        scan_id = state.get_or_create_scan()
-        logger.info(f"Resuming scan ID {scan_id}")
-    else:
-        scan_id = state.create_scan()
-
-    # Dependency check
-    missing_req, missing_opt = check_dependencies(config)
-    print_dependency_report(missing_req, missing_opt)
-    if missing_req:
-        logger.warning(f"{len(missing_req)} required tools missing")
-        if not interactive.confirm_action("Continue anyway?", default=False):
-            sys.exit(1)
-
-    # AI Engine
-    if args.no_ai:
-        config['ai']['mode'] = 'off'
-    ai = AIEngine(config)
-    if config['ai']['mode'] == 'auto' and not args.no_ai:
-        mode_choice = interactive.get_user_choice(
-            "Select AI mode:",
-            ["Smart (Llama3.2 — 8GB+ RAM recommended)",
-             "Light (TinyLlama — 4GB RAM)",
-             "Off (rule-based only)"],
-            default=2
-        )
-        if 'Smart' in mode_choice:
-            config['ai']['mode'] = 'smart'
-        elif 'Light' in mode_choice:
-            config['ai']['mode'] = 'light'
-        else:
-            config['ai']['mode'] = 'off'
-        ai.mode = config['ai']['mode']
-    logger.info(f"AI mode: {config['ai']['mode']}")
-
-    # Scope Manager
-    from modules.scope.scope_manager import ScopeManager
+    rl = init_rate_limiter(config.get('rate_limit', {}))
+    state = StateManager(workspace)
     scope = ScopeManager()
-    if args.scope_file:
-        scope.load_from_file(args.scope_file)
-        logger.info(f"Scope loaded from {args.scope_file}")
-    scope.add_domain(domain)
-    if args.scope:
-        for s in args.scope.split(','):
-            scope.add_domain(s.strip())
-    if args.out_of_scope:
-        for s in args.out_of_scope.split(','):
-            scope.add_out_of_scope(s.strip())
 
-    # Authentication
-    from modules.auth.auth_handler import AuthManager
-    auth = AuthManager(target_dir, config)
-    target_url = domain if domain.startswith('http') else f"https://{domain}"
-    auth.set_base_url(target_url)
-
-    if interactive.confirm_action("Does the target require authentication?", default=False):
-        auth_choice = interactive.get_user_choice(
-            "Authentication method:",
-            ["Form-based login", "HTTP Basic Auth",
-             "Bearer/JWT Token", "Cookies (paste)", "Load saved session"],
-            default=1
-        )
-        if auth_choice == "Form-based login":
-            login_url = interactive.get_user_input("Login URL", f"{target_url}/login")
-            username = interactive.get_user_input("Username")
-            password = interactive.get_user_input("Password")
-            user_field = interactive.get_user_input("Username field name", "username")
-            pass_field = interactive.get_user_input("Password field name", "password")
-            csrf_field = interactive.get_user_input("CSRF field name (leave blank if none)", "")
-            auth.login_form(login_url, username, password, user_field, pass_field,
-                            csrf_field=csrf_field or None)
-        elif auth_choice == "HTTP Basic Auth":
-            u = interactive.get_user_input("Username")
-            p = interactive.get_user_input("Password")
-            auth.login_basic(u, p)
-        elif auth_choice == "Bearer/JWT Token":
-            token = interactive.get_user_input("Token value")
-            header = interactive.get_user_input("Header name", "Authorization")
-            scheme = interactive.get_user_input("Scheme", "Bearer")
-            auth.set_token(token, header, scheme)
-        elif auth_choice == "Cookies (paste)":
-            raw = interactive.get_user_input("Cookies (name=value, separated by ;)")
-            cookies = {}
-            for part in raw.split(';'):
-                if '=' in part:
-                    k, v = part.split('=', 1)
-                    cookies[k.strip()] = v.strip()
-            auth.set_cookies(cookies)
-        elif auth_choice == "Load saved session":
-            if not auth.load_session():
-                logger.warning("No saved session found")
+    # Scope setup
+    if hasattr(args, 'scope') and args.scope:
+        scope.load_from_file(args.scope)
     else:
-        auth.load_session()
+        scope.add_domain(domain)
 
-    cookies_file = None
-    if auth.is_logged_in():
-        cookies_file = os.path.join(target_dir, 'cookies.txt')
-        auth.export_cookies_netscape(cookies_file)
-        logger.info(f"Cookies exported to {cookies_file}")
-
-    # Profile settings
-    profile = config.get('_profile', {})
-    ffuf_threads = profile.get('ffuf_threads', 20)
-    ffuf_delay = profile.get('ffuf_delay', 0.5)
-
-    # ─── PHASE 1: RECONNAISSANCE ──────────────────────────────────
-    recon_summary = {}
-    if not args.skip_recon and not (args.resume and state.is_phase_completed('recon')):
-        print(f"\n{'='*60}")
-        print(f"  [PHASE 1] RECONNAISSANCE")
-        print(f"{'='*60}")
-        state.checkpoint_phase('recon', 'started')
-
-        from modules.reconnaissance.subdomain import run_full_subdomain_enum
-        from modules.reconnaissance.filter_alive import filter_alive
-        from modules.reconnaissance.tech_detect import detect_technologies, get_all_technologies, get_recommended_modules
-        from modules.reconnaissance.content_discovery import discover_content
-        from modules.reconnaissance.historical_urls import get_all_historical_urls, extract_interesting_params
-        from modules.reconnaissance.subdomain_takeover import check_subdomain_takeovers
-        from modules.reconnaissance.tech_specific import run_tech_specific_scans
-
-        # Subdomain enumeration
-        subdomains = run_full_subdomain_enum(domain, target_dir)
-        logger.info(f"Total subdomains: {len(subdomains)}")
-
-        # Filter alive (with scope)
-        alive = filter_alive(subdomains, target_dir, scope=scope)
-
-        # Technology detection
-        max_targets = profile.get('max_subdomains', 100)
-        all_targets = list(set([target_url] + alive))[:max_targets]
-        tech_results = detect_technologies(all_targets, target_dir)
-        all_techs = get_all_technologies(tech_results)
-        recommended_modules = get_recommended_modules(tech_results)
-
-        # Content discovery
-        content_results = discover_content(
-            domain, target_dir,
-            tech_stack=all_techs,
-            threads=ffuf_threads,
-            delay=ffuf_delay,
-            cookies_file=cookies_file
-        )
-
-        # Historical URLs
-        historical_urls = get_all_historical_urls(domain, target_dir)
-        interesting_params = extract_interesting_params(historical_urls)
-
-        # Subdomain takeover
-        takeover_findings = check_subdomain_takeovers(subdomains, target_dir)
-
-        # Tech-specific scanning
-        time.sleep(config.get('rate_limit', {}).get('delay_between_phases', 2))
-        tech_specific = run_tech_specific_scans(all_targets, tech_results, target_dir, auth)
-
-        recon_summary = {
-            'subdomains': subdomains,
-            'alive_subdomains': alive,
-            'technologies': tech_results,
-            'all_technologies': all_techs,
-            'recommended_modules': recommended_modules,
-            'content_discovery': content_results,
-            'historical_urls_count': len(historical_urls),
-            'interesting_params': interesting_params,
-            'subdomain_takeovers': takeover_findings,
-        }
-        write_json(os.path.join(target_dir, 'recon_summary.json'), recon_summary)
-        state.save_subdomains([{'domain': s, 'alive': s in alive} for s in subdomains])
-        state.checkpoint_phase('recon', 'completed', {
-            'subdomains': len(subdomains), 'alive': len(alive),
-            'takeovers': len(takeover_findings)
-        })
-        print(f"\n[+] Recon complete: {len(subdomains)} subdomains, {len(alive)} alive, "
-              f"{len(takeover_findings)} takeovers")
-    else:
-        print("\n[SKIP] Reconnaissance phase skipped.")
-        from core.utils import load_json_file
-        recon_summary = load_json_file(os.path.join(target_dir, 'recon_summary.json')) or {}
-
-    alive_hosts = recon_summary.get('alive_subdomains', [])
-    all_targets = list(set([target_url] + alive_hosts))
-    all_techs = recon_summary.get('all_technologies', [])
-    recommended_modules = recon_summary.get('recommended_modules', [])
-
-    # ─── CRAWL + JS ANALYSIS + PARAM DISCOVERY ────────────────────
-    crawler_results = {}
-    js_results = {}
-    if not args.skip_js and not (args.resume and state.is_phase_completed('crawl')):
-        print(f"\n{'='*60}")
-        print(f"  [PHASE 1b] CRAWL + JS ANALYSIS + PARAMETER DISCOVERY")
-        print(f"{'='*60}")
-        state.checkpoint_phase('crawl', 'started')
-
-        from modules.crawler.web_crawler import crawl_target
-        from modules.javascript.js_analyzer import analyze_js_files
-        from modules.reconnaissance.parameter_discovery import run_parameter_discovery
-
-        crawler_results = crawl_target(target_url, target_dir, auth=auth,
-                                        scope=scope, config=config)
-        all_urls = crawler_results.get('visited_urls', [])
-
-        js_files = crawler_results.get('js_files', [])
-        if js_files:
-            js_results = analyze_js_files(js_files, target_url, target_dir, auth)
-            # Add JS-discovered endpoints to URL pool
-            all_urls.extend(js_results.get('endpoints_found', []))
-
-        # Historical URL parameter extraction
-        from core.utils import load_json_file
-        hist_file = os.path.join(target_dir, 'historical_urls.txt')
-        hist_urls = []
-        if os.path.exists(hist_file):
-            with open(hist_file, 'r') as f:
-                hist_urls = [l.strip() for l in f if l.strip()]
-        all_urls.extend(hist_urls[:500])
-        all_urls = list(set(all_urls))
-
-        # Parameter discovery
-        run_parameter_discovery(all_urls, target_dir, auth)
-
-        state.checkpoint_phase('crawl', 'completed', {
-            'urls': len(all_urls), 'js_files': len(js_files),
-            'secrets': len(js_results.get('secrets', []))
-        })
-        print(f"\n[+] Crawl complete: {len(crawler_results.get('visited_urls',[]))} pages, "
-              f"{len(js_files)} JS files")
-        if js_results.get('secrets'):
-            print(f"[!] {len(js_results['secrets'])} potential secrets found in JS files!")
-    else:
-        print("\n[SKIP] Crawl/JS phase skipped.")
-
-    # ─── PHASE 2: PORT SCANNING ───────────────────────────────────
-    if not args.skip_scan and not (args.resume and state.is_phase_completed('scan')):
-        print(f"\n{'='*60}")
-        print(f"  [PHASE 2] PORT SCANNING + SSL/TLS")
-        print(f"{'='*60}")
-        state.checkpoint_phase('scan', 'started')
-        time.sleep(config.get('rate_limit', {}).get('delay_between_phases', 2))
-
-        from modules.scanning.port_scan import scan_ports, scan_ssl_tls
-        scan_targets = [t.replace('http://', '').replace('https://', '').split('/')[0]
-                        for t in all_targets[:30]]
-        port_results = scan_ports(scan_targets, target_dir)
-
-        ssl_results = scan_ssl_tls(domain, target_dir)
-        write_json(os.path.join(target_dir, 'testssl_results.json'), ssl_results)
-
-        if ssl_results.get('findings'):
-            print(f"[!] {len(ssl_results['findings'])} SSL/TLS issues found")
-
-        state.checkpoint_phase('scan', 'completed', {'hosts': len(port_results)})
-        print(f"\n[+] Port scan complete: {len(port_results)} hosts")
-    else:
-        print("\n[SKIP] Port scanning phase skipped.")
-
-    # ─── PHASE 3: VULNERABILITY ANALYSIS ─────────────────────────
-    vulnerabilities = []
-    if not args.skip_vuln and not (args.resume and state.is_phase_completed('vuln')):
-        print(f"\n{'='*60}")
-        print(f"  [PHASE 3] VULNERABILITY ANALYSIS")
-        print(f"{'='*60}")
-        state.checkpoint_phase('vuln', 'started')
-        time.sleep(config.get('rate_limit', {}).get('delay_between_phases', 2))
-
-        from modules.vulnerability.nuclei_runner import run_nuclei
-        from modules.vulnerability.active_vulns import run_active_vulnerability_tests
-        from modules.reconnaissance.info_disclosure import run_info_disclosure_tests
-        from modules.api.api_tester import run_api_tests
-
-        # Nuclei scan
-        nuclei_targets = scope.filter_targets(all_targets[:50])
-        extra_headers = auth.get_auth_headers_for_tool() if auth.is_logged_in() else None
-        vulnerabilities = run_nuclei(
-            nuclei_targets, target_dir,
-            severity=args.severity,
-            cookies_file=cookies_file,
-            tech_stack=all_techs,
-            extra_headers=extra_headers
-        )
-
-        # Active vulnerability tests on URLs with parameters
-        all_test_urls = []
-        if crawler_results:
-            all_test_urls.extend(crawler_results.get('visited_urls', []))
-        from core.utils import load_json_file
-        hist_file = os.path.join(target_dir, 'historical_urls.txt')
-        if os.path.exists(hist_file):
-            with open(hist_file) as f:
-                all_test_urls.extend([l.strip() for l in f if l.strip() and '?' in l])
-        all_test_urls = list(set(all_test_urls))
-
-        active_findings = run_active_vulnerability_tests(
-            all_test_urls, target_dir, auth=auth,
-            forms=crawler_results.get('forms', []) if crawler_results else []
-        )
-
-        # Information disclosure
-        run_info_disclosure_tests(nuclei_targets[:15], target_dir, auth)
-
-        # API security testing
-        if not args.skip_api:
-            run_api_tests(target_url, target_dir, auth=auth, crawler_results=crawler_results)
-
-        # AI-powered prioritization
-        if ai.mode != 'off' and vulnerabilities:
-            print("[AI] Prioritizing vulnerabilities...")
-            vulnerabilities = ai.prioritize_vulnerabilities(vulnerabilities)
-
-        state.checkpoint_phase('vuln', 'completed', {'findings': len(vulnerabilities)})
-        print(f"\n[+] Vulnerability analysis complete: {len(vulnerabilities)} findings")
-    else:
-        print("\n[SKIP] Vulnerability analysis phase skipped.")
-
-    # ─── PHASE 3b: BUSINESS LOGIC (IDOR + Race Condition + Upload) ──
-    if not args.skip_vuln:
-        print(f"\n[*] Business Logic Testing (IDOR)...")
-        from modules.business_logic.idor import scan_idor
-        idor_urls = []
-        if crawler_results:
-            idor_urls.extend(crawler_results.get('visited_urls', []))
-        hist_file = os.path.join(target_dir, 'historical_urls.txt')
-        hist_url_list = []
-        if os.path.exists(hist_file):
-            with open(hist_file) as f:
-                hist_url_list = [l.strip() for l in f if l.strip()]
-            idor_urls.extend(hist_url_list)
-        idor_urls = scope.filter_targets(list(set(idor_urls)))
-        idor_findings = scan_idor(auth, idor_urls, target_dir)
-        if idor_findings:
-            print(f"[!] {len(idor_findings)} IDOR vulnerability candidates found!")
-
-        # Race condition testing
-        if not args.skip_race:
-            print(f"\n[*] Race Condition Testing...")
-            from modules.business_logic.race_condition import run_race_condition_tests
-            race_findings = run_race_condition_tests(
-                target_dir, auth=auth,
-                crawler_results=crawler_results or {},
-                historical_urls=hist_url_list
-            )
-            if race_findings:
-                print(f"[!] {len(race_findings)} race condition candidates found!")
-
-        # File upload testing
-        if not args.skip_upload:
-            print(f"\n[*] File Upload Testing...")
-            from modules.vulnerability.file_upload_tester import run_file_upload_tests
-            upload_findings = run_file_upload_tests(
-                target_dir, auth=auth,
-                crawler_results=crawler_results or {},
-                historical_urls=hist_url_list
-            )
-            if upload_findings:
-                print(f"[!] {len(upload_findings)} file upload vulnerabilities found!")
-
-        # Cloud / infrastructure scanning
-        if not args.skip_cloud:
-            print(f"\n[*] Cloud Infrastructure Scanning (S3/Azure/GCS/DB)...")
-            from modules.scanning.cloud_scanner import run_cloud_scans
-            cloud_findings = run_cloud_scans(domain, target_dir, alive_hosts=all_targets)
-            s3_count = len(cloud_findings.get('s3_buckets', []))
-            db_count = len(cloud_findings.get('database_exposures', []))
-            if s3_count or db_count:
-                print(f"[!] Cloud: {s3_count} S3/blob issues, {db_count} DB exposures!")
-
-        # Auth / JWT / OAuth / Forceful Browsing testing
-        print(f"\n[*] Authentication Security Testing...")
-        from modules.auth.auth_testing import run_auth_tests
-        run_auth_tests(
-            target_url, target_dir, auth=auth,
-            crawler_results=crawler_results or {},
-            login_url=args.login_url or f"{target_url}/login",
-            jwt_token=args.jwt_token
-        )
-
-    # ─── PHASE 4: EXPLOITATION ────────────────────────────────────
-    if not args.skip_exploit and not (args.resume and state.is_phase_completed('exploit')):
-        print(f"\n{'='*60}")
-        print(f"  [PHASE 4] EXPLOITATION")
-        print(f"{'='*60}")
-        if interactive.confirm_action("Proceed with exploitation phase?", default=True):
-            state.checkpoint_phase('exploit', 'started')
-            from modules.exploitation.exploit_selector import select_vulnerabilities
-            from modules.exploitation.sqlmap_wrapper import run_sqlmap
-            from modules.exploitation.chain_engine import detect_chains, generate_chain_report
-
-            selected = select_vulnerabilities(target_dir)
-            if selected:
-                for vuln in selected:
-                    if 'original' in vuln:
-                        name = vuln['original'].get('info', {}).get('name', '').lower()
-                        url = vuln['original'].get('matched-at', vuln['original'].get('host', ''))
-                    else:
-                        name = vuln.get('info', {}).get('name', vuln.get('type', '')).lower()
-                        url = vuln.get('matched-at', vuln.get('host', vuln.get('url', '')))
-
-                    if 'sql' in name:
-                        run_sqlmap(url, target_dir, cookies_file=cookies_file)
-                    elif 'xss' in name:
-                        print(f"[*] XSS confirmed at {url} — use browser/Burp for full PoC")
-                    elif 'ssrf' in name:
-                        print(f"[*] SSRF confirmed at {url} — attempt cloud metadata access manually")
-                    else:
-                        print(f"[*] Manual exploitation required for: {name} @ {url}")
-
-            # Detect exploit chains
-            all_findings = vulnerabilities.copy()
-            from core.utils import load_json_file
-            active = load_json_file(os.path.join(target_dir, 'active_vuln_findings.json'))
-            if active:
-                for cat_findings in active.values():
-                    if isinstance(cat_findings, list):
-                        all_findings.extend(cat_findings)
-            chains = detect_chains(all_findings)
-            if chains:
-                print(generate_chain_report(chains))
-
-            state.checkpoint_phase('exploit', 'completed')
-        else:
-            print("[SKIP] Exploitation skipped by user.")
-    else:
-        print("\n[SKIP] Exploitation phase skipped.")
-
-    # ─── PHASE 5: POST-EXPLOITATION ───────────────────────────────
-    if not args.skip_post:
-        print(f"\n{'='*60}")
-        print(f"  [PHASE 5] POST-EXPLOITATION")
-        print(f"{'='*60}")
-        if interactive.confirm_action(
-            "Do you have a web shell / RCE access for post-exploitation?", default=False):
-            shell_url = interactive.get_user_input(
-                "Shell URL (e.g., http://target/shell.php?cmd=COMMAND)")
-            if shell_url:
-                from modules.post_exploitation.linux_pe import upload_and_run_linpeas
-                pe_result = upload_and_run_linpeas(auth, target_dir, shell_url)
-                if pe_result.get('suggestions'):
-                    print(f"\n[!] {len(pe_result['suggestions'])} privilege escalation vectors found!")
-                    for s in pe_result['suggestions']:
-                        sev = s.get('severity', 'unknown')
-                        note = s.get('note', s.get('name', str(s)))
-                        print(f"  [{sev.upper()}] {note}")
-        else:
-            print("[*] No shell access. Skipping post-exploitation.")
-
-    # ─── PHASE 6: REPORTING ───────────────────────────────────────
-    print(f"\n{'='*60}")
-    print(f"  [PHASE 6] REPORTING")
-    print(f"{'='*60}")
-
-    from modules.reporting.json_builder import build_final_report
-    from modules.reporting.ai_summary import (generate_summary, generate_html_report,
-                                               generate_markdown_report,
-                                               generate_hackerone_submission)
-
-    final_report = build_final_report(target_dir, domain,
-                                       start_time=start_time, state_manager=state)
-
-    # AI summary
-    ai_summary = ""
-    if ai.mode != 'off':
-        print("[AI] Generating executive summary...")
-        ai_summary = generate_summary(ai, final_report)
-        if ai_summary:
-            with open(os.path.join(target_dir, 'ai_summary.txt'), 'w') as f:
-                f.write(ai_summary)
-            print(f"\n{'─'*60}")
-            print("[AI EXECUTIVE SUMMARY]")
-            print(ai_summary[:800] + ("..." if len(ai_summary) > 800 else ""))
-            print(f"{'─'*60}")
-
-    # Generate reports
-    html_path = generate_html_report(final_report, ai_summary, target_dir)
-    md_path = generate_markdown_report(final_report, ai_summary, target_dir)
-
-    # Generate HackerOne submissions for top findings
-    top_findings = [v for v in final_report.get('vulnerabilities', [])
-                    if v.get('severity', v.get('info', {}).get('severity', '')) in ('critical', 'high')]
-    for finding in top_findings[:3]:
-        generate_hackerone_submission(finding, ai, target_dir)
-
-    # New findings vs last scan
-    new_findings = state.get_new_findings_vs_last_scan()
-    if new_findings:
-        print(f"\n[!] {len(new_findings)} NEW findings compared to last scan (delta report)")
-
-    state.complete_scan()
-    state.close()
-
-    # Final summary
-    summary = final_report.get('summary', {})
-    sev = summary.get('by_severity', {})
-    print(f"\n{'='*60}")
-    print("  SCAN COMPLETE")
-    print(f"{'='*60}")
-    print(f"  Target:   {domain}")
-    print(f"  Critical: {sev.get('critical', 0)}")
-    print(f"  High:     {sev.get('high', 0)}")
-    print(f"  Medium:   {sev.get('medium', 0)}")
-    print(f"  Low:      {sev.get('low', 0)}")
-    print(f"  IDOR:     {summary.get('idor_findings', 0)}")
-    print(f"  Takeover: {summary.get('subdomain_takeovers', 0)}")
-    print(f"  Chains:   {summary.get('exploit_chains', 0)}")
-    print(f"\n  Reports saved to: {target_dir}/")
-    print(f"    JSON:   final_report.json")
-    print(f"    HTML:   report.html")
-    print(f"    MD:     report.md")
-    print(f"    AI:     ai_summary.txt")
-    if top_findings:
-        print(f"    Submissions: submissions/ ({len(top_findings[:3])} HackerOne drafts)")
-    print(f"{'='*60}")
-    logger.info("Snooger v2.0 completed successfully.")
-
-    # ─── Monitor Mode ──────────────────────────────────────────────
-    if args.monitor:
-        print(f"\n[*] Starting continuous monitor mode (interval: {args.monitor_interval}min)")
-        from modules.scanning.monitor_mode import MonitorMode
-        from modules.reporting.json_builder import build_final_report as _build_report
-
-        def _rescan():
-            """Mini rescan function for monitor mode — runs nuclei + active vulns."""
-            from modules.vulnerability.nuclei_runner import run_nuclei
-            from modules.vulnerability.active_vulns import run_active_vulnerability_tests
-            new_vulns = run_nuclei(
-                scope.filter_targets(all_targets[:30]), target_dir,
-                severity=args.severity, cookies_file=cookies_file,
-                tech_stack=all_techs
-            )
-            report = _build_report(target_dir, domain, state_manager=state)
-            return report.get('vulnerabilities', [])
-
-        monitor_config = dict(config)
-        monitor_config['monitor'] = {
-            'interval_minutes': args.monitor_interval,
-            'max_rounds': 0
-        }
-        monitor = MonitorMode(domain, target_dir, monitor_config, _rescan)
+    # AI engine
+    ai = None
+    if config['ai']['mode'] != 'off':
         try:
-            monitor.run()
-        except KeyboardInterrupt:
-            print("\n[*] Monitor mode stopped by user.")
+            ai = AIEngine(config)
+            providers = ai.get_available_providers()
+            logger.info(f"AI engine initialized with providers: {providers}")
+        except Exception as e:
+            logger.warning(f"AI engine init failed: {e}")
+
+    # Async executor
+    async_cfg = config.get('async', {})
+    executor = AsyncExecutor(
+        max_concurrent=async_cfg.get('max_concurrent_scans', 20),
+        thread_pool_size=async_cfg.get('thread_pool_size', 10)
+    )
+
+    # Plugin system
+    plugins = init_plugins(config)
+    context = ScanContext(target, workspace, config, scope=scope, state=state,
+                          ai=ai, event_bus=get_event_bus())
+
+    # Notifications
+    notif = init_notifications(config)
+
+    # ─── Execute Phases ───────────────────────────────────────────
+
+    phase_results = {}
+
+    try:
+        # Phase 1: Reconnaissance
+        print_phase_header(1, "Reconnaissance")
+        recon_data = await phase_recon(target, workspace, config,
+                                       scope, state, ai, executor, context)
+        phase_results['recon'] = recon_data
+
+        # Plugin: custom recon scanners
+        plugin_findings = plugins.run_scanners('recon', target, context)
+        if plugin_findings:
+            logger.info(f"Plugin recon findings: {len(plugin_findings)}")
+
+        # Phase 2: Scanning
+        print_phase_header(2, "Port Scanning & Tech Detection")
+        scan_data = await phase_scanning(target, workspace, config,
+                                          scope, state, ai, executor, recon_data)
+        phase_results['scanning'] = scan_data
+
+        # Phase 3: Crawling
+        print_phase_header(3, "Web Crawling & JS Analysis")
+        crawl_data = await phase_crawl(target, workspace, config,
+                                        scope, state, ai, executor, recon_data)
+        phase_results['crawl'] = crawl_data
+
+        # Phase 4: Vulnerability Analysis
+        print_phase_header(4, "Vulnerability Analysis")
+        vuln_data = await phase_vuln_analysis(target, workspace, config,
+                                              scope, state, ai, executor,
+                                              recon_data, crawl_data, scan_data)
+        phase_results['vuln'] = vuln_data
+
+        # Plugin: custom vulnerability scanners
+        plugin_vuln_findings = plugins.run_scanners('vuln', target, context)
+        if plugin_vuln_findings:
+            logger.info(f"Plugin vuln findings: {len(plugin_vuln_findings)}")
+
+        # Phase 5: Auth Testing
+        print_phase_header(5, "Authentication & Authorization Testing")
+        auth_data = await phase_auth_testing(target, workspace, config,
+                                             state, ai, crawl_data)
+        phase_results['auth'] = auth_data
+
+        # Phase 6: Business Logic
+        print_phase_header(6, "Business Logic Testing")
+        biz_data = await phase_business_logic(target, workspace, config,
+                                              state, crawl_data)
+        phase_results['business'] = biz_data
+
+        # Phase 7: Exploitation (skip if --skip-exploit)
+        if not getattr(args, 'skip_exploit', False):
+            print_phase_header(7, "Exploitation & PoC Generation")
+            exploit_data = await phase_exploitation(target, workspace, config,
+                                                     state, ai, vuln_data)
+            phase_results['exploit'] = exploit_data
+
+        # Phase 8: Reporting
+        print_phase_header(8, "Report Generation")
+        report_data = await phase_reporting(target, workspace, config, state, ai)
+        phase_results['report'] = report_data
+
+    except KeyboardInterrupt:
+        logger.warning("\nScan interrupted by user. Generating partial report...")
+        try:
+            await phase_reporting(target, workspace, config, state, ai)
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"Scan error: {e}")
+        import traceback
+        traceback.print_exc()
+
+    finally:
+        executor.shutdown()
+        state.close()
+
+    # ─── Summary ──────────────────────────────────────────────────
+    findings_count = state.findings_count() if hasattr(state, 'findings_count') else 0
+
+    summary = {
+        'Target': target,
+        'Workspace': workspace,
+        'Duration': f"{time.time():.0f}s",
+        'Total Findings': findings_count,
+    }
+
+    print_summary_table(summary)
+
+    emit('scan_completed', {
+        'target': target, 'workspace': workspace,
+        'summary': {'total_findings': findings_count},
+    }, source='main')
+
+    logger.info(f"\n✅ Scan complete! Reports saved to: {workspace}")
+
+
+# ─── CLI Arguments ────────────────────────────────────────────────────
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Snooger v3.0 — Professional Penetration Testing Framework',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python snooger.py -t example.com
+  python snooger.py -t example.com -p thorough
+  python snooger.py -t example.com -p stealth --scope scope.txt
+  python snooger.py -t https://app.example.com --skip-exploit
+  python snooger.py --list-plugins
+        """
+    )
+
+    # Required
+    parser.add_argument('-t', '--target', help='Target domain or URL')
+
+    # Profiles
+    parser.add_argument('-p', '--profile', choices=['quick', 'stealth', 'thorough'],
+                        default=None, help='Scan profile (default: thorough)')
+
+    # Scope
+    parser.add_argument('-s', '--scope', help='Scope file (txt/json)')
+    parser.add_argument('--exclude', nargs='+', help='Exclude domains/patterns')
+
+    # Config
+    parser.add_argument('-c', '--config', default='config.yaml', help='Config file path')
+    parser.add_argument('-w', '--workspace', help='Custom workspace directory')
+
+    # Phases
+    parser.add_argument('--skip-exploit', action='store_true', help='Skip exploitation phase')
+    parser.add_argument('--skip-post', action='store_true', help='Skip post-exploitation')
+    parser.add_argument('--recon-only', action='store_true', help='Only run reconnaissance')
+    parser.add_argument('--vuln-only', action='store_true', help='Only run vulnerability analysis')
+
+    # Auth
+    parser.add_argument('--cookie', help='Session cookie for authenticated scanning')
+    parser.add_argument('--header', nargs='+', help='Custom headers (key:value)')
+    parser.add_argument('--jwt', help='JWT token for authenticated scanning')
+    parser.add_argument('--login-url', help='Login URL for auth testing')
+
+    # AI
+    parser.add_argument('--ai-mode', choices=['auto', 'smart', 'light', 'off'],
+                        help='Override AI mode')
+
+    # Output
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.add_argument('-q', '--quiet', action='store_true', help='Quiet mode')
+    parser.add_argument('--json-output', help='Output results as JSON to file')
+
+    # Plugins
+    parser.add_argument('--list-plugins', action='store_true', help='List loaded plugins')
+    parser.add_argument('--no-plugins', action='store_true', help='Disable plugins')
+
+    # Resume
+    parser.add_argument('--resume', help='Resume scan from workspace directory')
+
+    return parser.parse_args()
+
+
+# ─── Entry Point ──────────────────────────────────────────────────────
+
+def main():
+    args = parse_args()
+
+    # Banner
+    print_banner(VERSION)
+
+    # Load config
+    config_path = os.path.join(BASE_DIR, args.config) if not os.path.isabs(args.config) else args.config
+    try:
+        config = load_config(config_path)
+    except FileNotFoundError:
+        print(f"[!] Config not found: {config_path}")
+        print(f"    Create one from config.yaml.example or run with defaults")
+        config = load_config.__wrapped__(config_path) if hasattr(load_config, '__wrapped__') else {}
+        from core.config_loader import _apply_defaults
+        config = _apply_defaults({})
+
+    # Override workspace
+    if args.workspace:
+        config['workspace'] = args.workspace
+
+    # Override AI mode
+    if args.ai_mode:
+        config['ai']['mode'] = args.ai_mode
+
+    # Disable plugins
+    if getattr(args, 'no_plugins', False):
+        config['plugins']['enabled'] = False
+
+    # List plugins
+    if args.list_plugins:
+        plugins = init_plugins(config)
+        plugin_list = plugins.list_plugins()
+        if plugin_list:
+            print(f"\n📦 Loaded {len(plugin_list)} plugins:\n")
+            for p in plugin_list:
+                print(f"  [{p['category']}] {p['name']} v{p['version']} — {p['description']}")
+        else:
+            print("\n📦 No plugins found. Add .py files to the plugins/ directory.\n")
+        return
+
+    # Target validation
+    if not args.target and not args.resume:
+        print("[!] Target required. Use -t <domain> or --resume <workspace>")
+        return
+
+    # Setup
+    workspace_base = config.get('workspace', 'workspace')
+    os.makedirs(workspace_base, exist_ok=True)
+    logger = setup_logging(workspace_base, args.verbose)
+
+    # Suppress warnings
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    logger.info(f"Snooger v{VERSION} starting...")
+    logger.info(f"Target: {args.target}")
+    if args.profile:
+        logger.info(f"Profile: {args.profile}")
+
+    # Run async
+    try:
+        asyncio.run(run_scan(args, config))
+    except KeyboardInterrupt:
+        logger.info("\n[!] Scan aborted by user.")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 if __name__ == '__main__':
     main()

