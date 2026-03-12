@@ -39,9 +39,10 @@ class AIEngine:
 
         # Groq (free tier: 14,400 tokens/min on llama3-8b-8192)
         groq_cfg = ai_cfg.get('groq', {})
-        if groq_cfg.get('api_key'):
+        groq_key = groq_cfg.get('api_key', '')
+        if groq_key and not groq_key.startswith('${') and not groq_key.endswith('}'):
             providers['groq'] = {
-                'api_key': groq_cfg['api_key'],
+                'api_key': groq_key,
                 'model': groq_cfg.get('model', 'llama3-8b-8192'),
                 'max_tokens': groq_cfg.get('max_tokens', 4096),
                 'timeout': groq_cfg.get('timeout', 30),
@@ -49,9 +50,10 @@ class AIEngine:
 
         # DeepSeek (free tier available)
         ds_cfg = ai_cfg.get('deepseek', {})
-        if ds_cfg.get('api_key'):
+        ds_key = ds_cfg.get('api_key', '')
+        if ds_key and not ds_key.startswith('${') and not ds_key.endswith('}'):
             providers['deepseek'] = {
-                'api_key': ds_cfg['api_key'],
+                'api_key': ds_key,
                 'model': ds_cfg.get('model', 'deepseek-chat'),
                 'max_tokens': ds_cfg.get('max_tokens', 2000),
                 'timeout': ds_cfg.get('timeout', 60),

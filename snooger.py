@@ -261,6 +261,8 @@ async def phase_auth_testing(target: str, workspace: str, config: dict,
     login_url = next((u for u in visited if any(k in u.lower() for k in ['login', 'signin', 'auth', 'session'])), None)
     if login_url:
         logger.info(f"Auto-detected potential login URL: {login_url}")
+    else:
+        logger.info("No login/auth URL detected. Skipping deep authentication tests.")
     
     # Auto-detect JWT from headers or cookies in crawl data
     jwt_token = None
@@ -293,10 +295,12 @@ async def phase_business_logic(target: str, workspace: str, config: dict,
 
     urls = crawl_data.get('crawler', {}).get('urls_with_params', [])
     if urls:
-        logger.info("Running IDOR tests...")
+        logger.info(f"Running IDOR & Logic tests on {len(urls)} URLs...")
         idor_results = scan_idor(None, urls[:20], workspace)
         results['idor'] = idor_results
         state.save_phase_data('idor', idor_results)
+    else:
+        logger.info("No parameterized URLs found for logic testing. Skipping Phase 6.")
 
     emit('phase_completed', {'phase': 'business_logic'}, source='business_logic')
     return results
@@ -469,7 +473,10 @@ async def run_scan(args, config: dict) -> None:
             providers = ai.get_available_providers()
             logger.info(f"AI engine initialized with providers: {providers}")
         except Exception as e:
-            logger.warning(f"AI engine init failed: {e}")
+            # The original instruction had a 'continue' here, but this is not a loop.
+            # It also tried to use 'provider' which is not defined in this scope.
+            # The most faithful interpretation is to enhance the existing error log.
+            logger.warning(f"AI engine initialization failed: {e}")
 
     # Async executor
     async_cfg = config.get('async', {})
