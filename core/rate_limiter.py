@@ -34,6 +34,7 @@ class RateLimiter:
     def wait(self, domain: str = 'global') -> None:
         """Wait until we can make a request (thread-safe)."""
         state = self._get_domain(domain)
+        wait_time = 0.0
 
         with self._lock:
             now = time.time()
@@ -41,10 +42,13 @@ class RateLimiter:
             # Check penalty
             if now < state['penalty_until']:
                 wait_time = state['penalty_until'] - now
-                self._lock.release()
-                time.sleep(wait_time)
-                self._lock.acquire()
-                now = time.time()
+
+        # Sleep outside the lock to avoid deadlocks
+        if wait_time > 0:
+            time.sleep(wait_time)
+
+        with self._lock:
+            now = time.time()
 
             # Check rate limit
             elapsed = now - state['last_request']
@@ -52,11 +56,14 @@ class RateLimiter:
 
             if elapsed < delay:
                 wait_time = delay - elapsed
-                self._lock.release()
-                time.sleep(wait_time)
-                self._lock.acquire()
+            else:
+                wait_time = 0.0
 
-            state['last_request'] = time.time()
+            state['last_request'] = now + max(wait_time, 0)
+
+        # Sleep outside the lock
+        if wait_time > 0:
+            time.sleep(wait_time)
 
     def penalize(self, domain: str = 'global', seconds: float = 5.0) -> None:
         """Apply a penalty delay for the domain (e.g., 429 response)."""
@@ -88,8 +95,8 @@ def init_rate_limiter(config = None) -> RateLimiter:
     """Initialize the global rate limiter from config."""
     global _global_limiter
     config = config or {}
-    rps = config.get('requests_per_second', 10)
-    adaptive = config.get('adaptive_delay', True)
+    rps = float(config.get('requests_per_second', 10))
+    adaptive = bool(config.get('adaptive_delay', True))
     _global_limiter = RateLimiter(rps, adaptive)
     return _global_limiter
 

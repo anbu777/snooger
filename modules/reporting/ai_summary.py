@@ -113,7 +113,7 @@ MARKDOWN_TEMPLATE = """# Security Assessment Report
 
 **Target:** `{{ target }}`
 **Date:** {{ generated_at }}
-**Tool:** Snooger v2.0
+**Tool:** Snooger v3.0
 
 ## Executive Summary
 
@@ -300,7 +300,7 @@ def generate_hackerone_submission(finding: dict, ai_engine, workspace_dir: str) 
             cwe_id=finding.get('cwe_id', 'N/A'),
         )
 
-    fname = f"hackerone_{vuln_type.replace(' ', '_')[:30]}.md"
+    fname = f"hackerone_{str(vuln_type).replace(' ', '_')[:30]}.md"
     fpath = os.path.join(workspace_dir, 'submissions', fname)
     os.makedirs(os.path.dirname(fpath), exist_ok=True)
     with open(fpath, 'w', encoding='utf-8') as f:

@@ -19,7 +19,7 @@ class AIEngine:
         self.config = config
         self.mode = config['ai']['mode']
         self.primary = config['ai'].get('primary_provider', 'ollama')
-        self.fallback_chain = config['ai'].get('fallback_chain', ['groq', 'deepseek'])
+        self.providers = self.config.get('providers', ['deepseek', 'groq'])
         self._providers = self._init_providers()
 
     def _init_providers(self) -> dict:

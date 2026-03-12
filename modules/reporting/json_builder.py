@@ -12,17 +12,21 @@ from core.utils import load_json_file, load_jsonl_file, write_json
 logger = logging.getLogger('snooger')
 
 def build_final_report(workspace_dir: str, target: str,
-                        start_time: Optional[str] = None,
-                        state_manager=None) -> dict:
+                        state_manager=None,
+                        start_time: Optional[str] = None) -> dict:
     """Aggregate all scan results into final_report.json."""
     end_time = datetime.utcnow().isoformat()
+
+    # Try to get start_time from state_manager metadata if not provided
+    if not start_time and state_manager and hasattr(state_manager, 'get_metadata'):
+        start_time = state_manager.get_metadata('scan_start_time', '')
 
     report = {
         'metadata': {
             'target': target,
             'start_time': start_time or 'unknown',
             'end_time': end_time,
-            'tool': 'Snooger v2.0',
+            'tool': 'Snooger v3.0',
             'generated_at': end_time,
         },
         'summary': {},
@@ -36,6 +40,11 @@ def build_final_report(workspace_dir: str, target: str,
         'exploit_chains': [],
         'idor_findings': [],
         'active_findings': {},
+        'sqli_findings': {},
+        'xss_findings': {},
+        'graphql_findings': {},
+        'smuggling_findings': {},
+        'upload_findings': {},
         'content_discovery': {},
     }
 
@@ -84,6 +93,46 @@ def build_final_report(workspace_dir: str, target: str,
         report['idor_findings'] = idor
         nuclei_vulns.extend(idor)
 
+    # Load SQLi custom findings
+    sqli = load_json_file(os.path.join(workspace_dir, 'sqli_findings.json'))
+    if sqli and isinstance(sqli, dict):
+        report['sqli_findings'] = sqli
+        for category, items in sqli.items():
+            if isinstance(items, list):
+                nuclei_vulns.extend(items)
+
+    # Load XSS custom findings
+    xss = load_json_file(os.path.join(workspace_dir, 'xss_findings.json'))
+    if xss and isinstance(xss, dict):
+        report['xss_findings'] = xss
+        for category, items in xss.items():
+            if isinstance(items, list):
+                nuclei_vulns.extend(items)
+
+    # Load GraphQL findings
+    graphql = load_json_file(os.path.join(workspace_dir, 'graphql_findings.json'))
+    if graphql and isinstance(graphql, dict):
+        report['graphql_findings'] = graphql
+        for category, items in graphql.items():
+            if isinstance(items, list):
+                nuclei_vulns.extend([i for i in items if isinstance(i, dict) and 'type' in i])
+
+    # Load HTTP smuggling findings
+    smuggling = load_json_file(os.path.join(workspace_dir, 'smuggling_findings.json'))
+    if smuggling and isinstance(smuggling, dict):
+        report['smuggling_findings'] = smuggling
+        for category, items in smuggling.items():
+            if isinstance(items, list):
+                nuclei_vulns.extend(items)
+
+    # Load file upload findings
+    upload = load_json_file(os.path.join(workspace_dir, 'upload_findings.json'))
+    if upload and isinstance(upload, dict):
+        report['upload_findings'] = upload
+        for category, items in upload.items():
+            if isinstance(items, list):
+                nuclei_vulns.extend(items)
+
     # Load subdomain takeovers
     takeovers = load_json_file(os.path.join(workspace_dir, 'subdomain_takeover.json'))
     if takeovers and isinstance(takeovers, list):
@@ -128,9 +177,9 @@ def build_final_report(workspace_dir: str, target: str,
 
     # Load content discovery
     content = load_json_file(os.path.join(workspace_dir, 'ffuf_output.json'))
-    if content:
+    if content and isinstance(content, dict):
         report['content_discovery'] = {
-            'paths_found': len(content.get('results', [])) if isinstance(content, dict) else 0
+            'paths_found': len(content.get('results', []))
         }
 
     # Deduplicate vulnerabilities
@@ -157,16 +206,17 @@ def build_final_report(workspace_dir: str, target: str,
         sev = v.get('severity', v.get('info', {}).get('severity', 'info')).lower()
         severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
-    report['summary'] = {
+    summary_data = {
         'total_findings': len(nuclei_vulns),
         'by_severity': severity_counts,
-        'subdomains_found': len(recon.get('subdomains', [])) if recon else 0,
-        'alive_hosts': len(recon.get('alive_subdomains', [])) if recon else 0,
-        'exploit_chains': len(chains),
-        'idor_findings': len(report['idor_findings']),
-        'subdomain_takeovers': len(report['subdomain_takeovers']),
-        'js_secrets': len(js_analysis.get('secrets', [])) if js_analysis else 0,
+        'subdomains_found': len(recon.get('subdomains', [])) if recon and isinstance(recon, dict) else 0,
+        'alive_hosts': len(recon.get('alive_subdomains', [])) if recon and isinstance(recon, dict) else 0,
+        'exploit_chains': len(chains) if isinstance(chains, list) else 0,
+        'idor_findings': len(report.get('idor_findings', [])),
+        'subdomain_takeovers': len(report.get('subdomain_takeovers', [])),
+        'js_secrets': len(js_analysis.get('secrets', [])) if js_analysis and isinstance(js_analysis, dict) else 0,
     }
+    report['summary'] = summary_data
 
     write_json(os.path.join(workspace_dir, 'final_report.json'), report)
     logger.info(f"Final report: {len(nuclei_vulns)} findings "
@@ -181,9 +231,11 @@ def _deduplicate_findings(vulns: list) -> list:
     for v in vulns:
         if not isinstance(v, dict):
             continue
-        url = v.get('url', v.get('matched-at', v.get('host', '')))
-        ftype = v.get('type', v.get('info', {}).get('name', ''))
-        key = (str(ftype).lower()[:50], str(url)[:100])
+        url_raw = v.get('url', v.get('matched-at', v.get('host', '')))
+        url = str(url_raw) if url_raw else ''
+        ftype_raw = v.get('type', v.get('info', {}).get('name', ''))
+        ftype = str(ftype_raw) if ftype_raw else ''
+        key = (ftype.lower()[:50], url[:100])
         if key not in seen:
             seen.add(key)
             unique.append(v)

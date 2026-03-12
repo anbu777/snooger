@@ -190,9 +190,14 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
                               scope, state, ai, executor,
                               recon_data: dict, crawl_data: dict,
                               scan_data: dict) -> dict:
-    """Phase 4: Vulnerability Analysis — Nuclei + Active Testing."""
+    """Phase 4: Vulnerability Analysis — Nuclei + Active + Custom Testing."""
     from modules.vulnerability.nuclei_runner import run_nuclei
     from modules.vulnerability.active_vulns import run_active_vulnerability_tests
+    from modules.vulnerability.sqli_tester import run_sqli_tests
+    from modules.vulnerability.xss_tester import run_xss_tests
+    from modules.vulnerability.graphql_tester import run_graphql_tests
+    from modules.vulnerability.smuggling_tester import run_smuggling_tests
+    from modules.vulnerability.upload_tester import run_upload_tests
 
     logger = logging.getLogger('snooger')
     results = {}
@@ -210,6 +215,19 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
     urls_with_params = crawl_data.get('crawler', {}).get('urls_with_params', [])
     forms = crawl_data.get('crawler', {}).get('forms', [])
     tech_stack = scan_data.get('tech_detect', {}).get('all_technologies', [])
+    js_files = crawl_data.get('js_analysis', {}).get('js_files', [])
+    target_url = f"https://{target}" if not target.startswith('http') else target
+
+    # AI-powered payload suggestion (wire the existing unused function)
+    if ai and tech_stack:
+        logger.info("AI generating custom payloads based on detected tech stack...")
+        try:
+            custom_payloads = ai.suggest_payloads(tech_stack, 'mixed')
+            if custom_payloads:
+                results['ai_payloads'] = custom_payloads
+                logger.info(f"AI suggested {len(custom_payloads) if isinstance(custom_payloads, list) else 'N/A'} custom payloads")
+        except Exception as e:
+            logger.debug(f"AI payload suggestion error: {e}")
 
     # Nuclei scan
     logger.info("Running Nuclei vulnerability scanner...")
@@ -217,7 +235,7 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
     results['nuclei'] = nuclei_results
     state.save_phase_data('nuclei', nuclei_results)
 
-    # Active vulnerability tests
+    # Active vulnerability tests (SSRF, SSTI, XXE, CORS, etc.)
     if urls_with_params:
         logger.info(f"Running active vulnerability tests on {len(urls_with_params)} URLs...")
         active_results = run_active_vulnerability_tests(
@@ -234,6 +252,60 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
                 severity = finding.get('severity', 'info')
                 event_name = 'critical_alert' if severity == 'critical' else 'finding_discovered'
                 emit(event_name, finding, source=vuln_type)
+
+    # Custom SQL Injection Testing
+    if urls_with_params:
+        logger.info(f"Running custom SQL injection tests on {len(urls_with_params)} URLs...")
+        try:
+            sqli_results = run_sqli_tests(urls_with_params, workspace, auth=None, ai=ai)
+            results['sqli'] = sqli_results
+            state.save_phase_data('sqli', sqli_results)
+        except Exception as e:
+            logger.error(f"SQLi testing error: {e}")
+
+    # Custom XSS Testing
+    if urls_with_params:
+        logger.info(f"Running custom XSS tests on {len(urls_with_params)} URLs...")
+        try:
+            xss_results = run_xss_tests(
+                urls_with_params, workspace, auth=None,
+                forms=forms, js_files=js_files
+            )
+            results['xss'] = xss_results
+            state.save_phase_data('xss', xss_results)
+        except Exception as e:
+            logger.error(f"XSS testing error: {e}")
+
+    # GraphQL Security Testing
+    logger.info("Running GraphQL security tests...")
+    try:
+        graphql_results = run_graphql_tests(target_url, workspace, auth=None)
+        results['graphql'] = graphql_results
+        state.save_phase_data('graphql', graphql_results)
+    except Exception as e:
+        logger.debug(f"GraphQL testing error: {e}")
+
+    # HTTP Request Smuggling Detection
+    logger.info("Running HTTP request smuggling detection...")
+    try:
+        smuggling_results = run_smuggling_tests(alive_subs[:5], workspace)
+        results['smuggling'] = smuggling_results
+        state.save_phase_data('smuggling', smuggling_results)
+    except Exception as e:
+        logger.debug(f"HTTP smuggling testing error: {e}")
+
+    # File Upload Security Testing
+    if forms:
+        logger.info("Running file upload security tests...")
+        try:
+            upload_results = run_upload_tests(
+                urls_with_params or alive_subs, workspace,
+                auth=None
+            )
+            results['upload'] = upload_results
+            state.save_phase_data('upload', upload_results)
+        except Exception as e:
+            logger.debug(f"Upload testing error: {e}")
 
     # AI prioritization
     if ai and isinstance(nuclei_results, list) and nuclei_results:
@@ -273,10 +345,11 @@ async def phase_auth_testing(target: str, workspace: str, config: dict,
             jwt_token = auth_hdr.split('Bearer ')[1].strip()
             break
 
+    from modules.authentication.auth_tester import run_auth_tests
     auth_results = run_auth_tests(
         target_url, workspace,
         crawler_results=crawl_data.get('crawler', {}),
-        login_url=login_url,
+        login_url=None,
         jwt_token=jwt_token
     )
     state.save_phase_data('auth_testing', auth_results)
@@ -314,31 +387,60 @@ async def phase_exploitation(target: str, workspace: str, config: dict,
     logger = logging.getLogger('snooger')
 
     all_findings = []
-    # Dynamic Phase Data Collection
-    sources = ['nuclei', 'active_vulns', 'idor', 'auth_testing', 'js_analysis']
+    finding_hashes = set()  # Deduplication
+    
+    def _add_finding(f):
+        """Add finding with dedup."""
+        key = f"{f.get('type', '')}|{f.get('url', '')}|{f.get('severity', '')}"
+        if key not in finding_hashes:
+            finding_hashes.add(key)
+            all_findings.append(f)
+    
+    # Dynamic Phase Data Collection — includes all new modules
+    sources = ['nuclei', 'active_vulns', 'sqli', 'xss', 'graphql',
+               'smuggling', 'upload', 'idor', 'auth_testing', 'js_analysis']
     for phase_name in sources:
         phase_data = state.get_phase_data(phase_name) or {}
         if isinstance(phase_data, dict):
             # Standard finding lists
-            for key in ['findings', 'secrets', 'idor', 'jwt_findings', 'oauth_findings']:
+            for key in ['findings', 'secrets', 'idor', 'jwt_findings', 'oauth_findings',
+                        'error_based', 'boolean_blind', 'time_based', 'waf_bypass',
+                        'reflected', 'dom_based', 'stored',
+                        'introspection', 'injection', 'depth_limit', 'batch_queries',
+                        'cl_te', 'te_cl', 'te_te',
+                        'extension_bypass', 'content_type_bypass',
+                        'endpoints']:
                 val = phase_data.get(key)
                 if isinstance(val, list):
-                    all_findings.extend(val)
-            
-            # Direct findings list if present
-            if 'findings' in phase_data and isinstance(phase_data['findings'], list):
-                all_findings.extend(phase_data['findings'])
+                    for f in val:
+                        if isinstance(f, dict):
+                            _add_finding(f)
         elif isinstance(phase_data, list):
-            all_findings.extend(phase_data)
+            for f in phase_data:
+                if isinstance(f, dict):
+                    _add_finding(f)
 
     if not all_findings:
         logger.info("No findings for exploitation phase")
         return {}
 
-    logger.info(f"Analyzing {len(all_findings)} findings for exploit chains...")
+    # False positive reduction + confidence scoring
+    logger.info(f"Running false positive filter on {len(all_findings)} findings...")
+    try:
+        from modules.validation.fp_reducer import FalsePositiveFilter, triage_findings_with_ai
+        fp_filter = FalsePositiveFilter()
+        all_findings = fp_filter.filter_findings(all_findings, min_confidence=25)
+
+        # AI triage for remaining findings
+        if ai:
+            all_findings = triage_findings_with_ai(all_findings, ai)
+    except Exception as e:
+        logger.debug(f"False positive filter error: {e}")
+
+    logger.info(f"Analyzing {len(all_findings)} verified findings for exploit chains...")
     chains = detect_chains(all_findings)
     
-    # New: AI-powered chain detection
+    # AI-powered chain detection
     if ai:
         logger.info("Running AI chain engine...")
         ai_chains = ai.analyze_vulnerability_chains(all_findings)
@@ -347,33 +449,33 @@ async def phase_exploitation(target: str, workspace: str, config: dict,
                 ac['ai_generated'] = True
                 chains.append(ac)
 
-    # New: Secret validation
+    # Secret validation
     secrets = [f for f in all_findings if f.get('type') == 'secret']
     if secrets:
         from modules.exploitation.secret_validator import run_secret_validation
         validated_secrets = run_secret_validation(secrets)
-        # Update findings with validation results
         for vs in validated_secrets:
             for f in all_findings:
                 if f.get('value') == vs.get('value'):
                     f.update(vs)
 
+    # Detect Exploit Chains
+    chains = detect_chains(all_findings)
     if chains:
         logger.warning(f"Found {len(chains)} potential exploit chains!")
         for chain in chains:
             emit('chain_detected', chain, source='chain_engine')
 
-    # AI PoC generation for critical findings
-    critical: list[dict] = [f for f in all_findings if f.get('severity') == 'critical']
-    pocs = []
+    critical = [f for f in all_findings if isinstance(f, dict) and f.get('severity') == 'critical']
+    pocs: List[Dict[str, Any]] = []
     if ai and critical:
-        logger.info(f"Generating AI PoC writeups for {len(list(critical)[:5])} critical findings...")  # type: ignore
-        for finding in list(critical)[:5]:  # type: ignore
+        logger.info(f"Generating AI PoC writeups for {len(critical[:5])} critical findings...")
+        for finding in critical[:5]:
             poc = ai.generate_poc_writeup(finding)
             if poc:
                 pocs.append({'finding': finding, 'poc': poc})
 
-    results = {'chains': chains, 'pocs': pocs}
+    results = {'chains': chains, 'pocs': pocs, 'total_findings': len(all_findings)}
     state.save_phase_data('exploitation', results)
 
     emit('phase_completed', {'phase': 'exploitation'}, source='exploitation')

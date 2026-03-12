@@ -98,7 +98,8 @@ def run_command(cmd: str, timeout: int = 300, cwd: Optional[str] = None,
         return proc.stdout, proc.stderr, proc.returncode
 
     except subprocess.TimeoutExpired:
-        logger.error(f"Command timeout ({timeout}s): {cmd[:80]}")
+        cmd_str = str(cmd)
+        logger.error(f"Command timeout ({timeout}s): {cmd_str[:80]}")
         return "", f"Timeout after {timeout}s", -1
     except FileNotFoundError as e:
         logger.debug(f"Tool not found: {e}")
@@ -228,7 +229,7 @@ def hash_finding(finding: dict) -> str:
         str(finding.get('matched-at', '')),
     ]
     key = '|'.join(key_parts)
-    return hashlib.md5(key.encode()).hexdigest()
+    return hashlib.sha256(key.encode()).hexdigest()
 
 
 # ─── Tool Checking ───────────────────────────────────────────────────

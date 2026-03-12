@@ -130,7 +130,7 @@ class StateManager:
             str(finding.get('url', finding.get('matched-at', ''))),
             str(finding.get('severity', '')),
         ])
-        return hashlib.md5(key.encode()).hexdigest()
+        return hashlib.sha256(key.encode()).hexdigest()
 
     def add_finding(self, finding: dict, source: str = '') -> bool:
         """Add a finding with deduplication. Returns True if new."""
@@ -145,7 +145,7 @@ class StateManager:
                 finding.get('type', 'unknown'),
                 finding.get('severity', 'info'),
                 finding.get('url', finding.get('matched-at', '')),
-                str(finding.get('evidence', ''))[:2000],
+                str(finding.get('evidence', ''))[:2000] if finding.get('evidence') else '',
                 source,
                 json.dumps(finding, default=str),
             ))
@@ -181,7 +181,7 @@ class StateManager:
         query += "WHEN 'critical' THEN 1 WHEN 'high' THEN 2 "
         query += "WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END"
         query += f" LIMIT ?"
-        params.append(limit)
+        params.append(str(limit))
 
         c.execute(query, params)
         results = []
