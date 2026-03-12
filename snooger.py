@@ -350,32 +350,53 @@ async def run_scan(args, config: dict) -> None:
     if args.profile:
         config = apply_profile(config, args.profile)
 
-    # Setup workspace
-    domain = target.replace('https://', '').replace('http://', '').split('/')[0]
-    workspace = os.path.join(
-        config.get('workspace', 'workspace'),
-        f"{domain}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    )
+    # 1. Determine Workspace
+    if getattr(args, 'resume', None):
+        workspace = args.resume
+        if not os.path.exists(workspace):
+            logger.error(f"Workspace not found for resume: {workspace}")
+            return
+    else:
+        domain_name = target.replace('https://', '').replace('http://', '').split('/')[0] if target else "unknown"
+        workspace = os.path.join(
+            config.get('workspace', 'workspace'),
+            f"{domain_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+    
     os.makedirs(workspace, exist_ok=True)
     logger.info(f"Workspace: {workspace}")
 
-    # Initialize components
-    emit('scan_started', {'target': target, 'workspace': workspace}, source='main')
-
-    rl = init_rate_limiter(config.get('rate_limit', {}))
+    # 2. Initialize State & Load Target if Resuming
     state = StateManager(workspace)
-    scope = ScopeManager()
-
-    # Save target in metadata for future resume
-    if target:
-        state.set_metadata('target', target)
-    else:
-        # Load target from state if resuming
+    if not target:
         target = state.get_metadata('target')
         if not target:
-             logger.error("No target found in workspace metadata. Cannot resume.")
-             return
-        args.target = target # Sync back
+            # Smart fallback: infer from workspace folder name (e.g., itpln.ac.id_2026...)
+            folder_name = os.path.basename(workspace)
+            if '_' in folder_name:
+                target_inference = folder_name.split('_')[0]
+                if '.' in target_inference:
+                    target = target_inference
+                    logger.info(f"Inferred target '{target}' from workspace name.")
+        
+        if not target:
+            logger.error("No target found in workspace metadata and could not be inferred. Please provide -t <domain>.")
+            return
+        args.target = target
+    else:
+        state.set_metadata('target', target)
+
+    # 3. Derive Domain and Scope
+    domain = target.replace('https://', '').replace('http://', '').split('/')[0]
+    scope = ScopeManager()
+    if hasattr(args, 'scope') and args.scope:
+        scope.load_from_file(args.scope)
+    else:
+        scope.add_target(domain)
+
+    # 4. Initialize Other Components
+    emit('scan_started', {'target': target, 'workspace': workspace}, source='main')
+    rl = init_rate_limiter(config.get('rate_limit', {}))
 
     # Scope setup
     if hasattr(args, 'scope') and args.scope:
