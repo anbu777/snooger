@@ -99,6 +99,39 @@ async def phase_recon(target: str, workspace: str, config: dict,
         logger.warning(f"Content discovery error: {e}")
         results['content'] = {}
 
+    # Historical URLs (orphaned module integration)
+    try:
+        from modules.reconnaissance.historical_urls import fetch_historical_urls
+        logger.info("Fetching historical URLs...")
+        hist_urls = fetch_historical_urls(target, workspace)
+        results['historical_urls'] = hist_urls
+        state.save_phase_data('historical_urls', hist_urls)
+    except Exception as e:
+        logger.debug(f"Historical URLs skipped: {e}")
+
+    # Subdomain takeover check (orphaned module integration)
+    try:
+        from modules.reconnaissance.subdomain_takeover import check_takeover
+        alive_subs = subdomains if isinstance(subdomains, list) else subdomains.get('alive_subdomains', [])
+        if alive_subs:
+            logger.info(f"Checking {len(alive_subs)} subdomains for takeover...")
+            takeover_results = check_takeover(alive_subs[:50], workspace)
+            results['subdomain_takeover'] = takeover_results
+            state.save_phase_data('subdomain_takeover', takeover_results)
+    except Exception as e:
+        logger.debug(f"Subdomain takeover check skipped: {e}")
+
+    # Info disclosure check (orphaned module integration)
+    try:
+        from modules.reconnaissance.info_disclosure import scan_info_disclosure
+        target_url = f"https://{target}" if not target.startswith('http') else target
+        logger.info("Scanning for information disclosure...")
+        info_disc = scan_info_disclosure(target_url, workspace)
+        results['info_disclosure'] = info_disc
+        state.save_phase_data('info_disclosure', info_disc)
+    except Exception as e:
+        logger.debug(f"Info disclosure scan skipped: {e}")
+
     emit('phase_completed', {'phase': 'recon', 'results_summary': {
         'subdomains_found': len(subdomains),
     }}, source='recon')
@@ -459,8 +492,6 @@ async def phase_exploitation(target: str, workspace: str, config: dict,
                 if f.get('value') == vs.get('value'):
                     f.update(vs)
 
-    # Detect Exploit Chains
-    chains = detect_chains(all_findings)
     if chains:
         logger.warning(f"Found {len(chains)} potential exploit chains!")
         for chain in chains:
@@ -561,23 +592,16 @@ async def run_scan(args, config: dict) -> None:
     emit('scan_started', {'target': target, 'workspace': workspace}, source='main')
     rl = init_rate_limiter(config.get('rate_limit', {}))
 
-    # Scope setup
-    if hasattr(args, 'scope') and args.scope:
-        scope.load_from_file(args.scope)
-    else:
-        scope.add_target(domain)
 
     # AI engine
     ai = None
+    interactive = getattr(args, 'interactive', False)
     if config['ai']['mode'] != 'off':
         try:
-            ai = AIEngine(config)
+            ai = AIEngine(config, interactive=interactive)
             providers = ai.get_available_providers()
             logger.info(f"AI engine initialized with providers: {providers}")
         except Exception as e:
-            # The original instruction had a 'continue' here, but this is not a loop.
-            # It also tried to use 'provider' which is not defined in this scope.
-            # The most faithful interpretation is to enhance the existing error log.
             logger.warning(f"AI engine initialization failed: {e}")
 
     # Async executor
@@ -615,6 +639,15 @@ async def run_scan(args, config: dict) -> None:
         if args.resume and recon_data:
             logger.info("Resuming Phase 1: Loaded data from state.")
         else:
+            # Interactive: let user choose recon depth
+            recon_depth = 'standard'
+            if interactive:
+                recon_depth = get_user_choice(
+                    "Select reconnaissance depth:",
+                    ['Quick (subdomains only)', 'Standard (subs + content discovery)', 'Deep (subs + content + historical + takeover)'],
+                    default=2
+                )
+                logger.info(f"Recon depth: {recon_depth}")
             recon_data = await phase_recon(target, workspace, config,
                                            scope, state, ai, executor, context)
             state.save_phase_data('recon_results', recon_data)
@@ -664,6 +697,14 @@ async def run_scan(args, config: dict) -> None:
         if args.resume and vuln_data:
             logger.info("Resuming Phase 4: Loaded data from state.")
         else:
+            # Interactive: let user choose severity filter
+            if interactive:
+                sev_choice = get_user_choice(
+                    "Select vulnerability scan depth:",
+                    ['Critical + High only (fast)', 'Critical + High + Medium (recommended)', 'All severities including Info (thorough)'],
+                    default=2
+                )
+                logger.info(f"Vuln scan depth: {sev_choice}")
             vuln_data = await phase_vuln_analysis(target, workspace, config,
                                                   scope, state, ai, executor,
                                                   recon_data, crawl_data, scan_data)
@@ -702,6 +743,29 @@ async def run_scan(args, config: dict) -> None:
         
         phase_results['business'] = biz_data
 
+        # Phase 6b: Race Condition & API Testing (orphaned modules)
+        try:
+            from modules.business_logic.race_condition import test_race_conditions
+            race_urls = crawl_data.get('crawler', {}).get('forms', []) if crawl_data else []
+            if race_urls:
+                logger.info(f"Testing {len(race_urls)} forms for race conditions...")
+                race_results = test_race_conditions(race_urls[:10], workspace)
+                if race_results:
+                    state.save_phase_data('race_condition', race_results)
+        except Exception as e:
+            logger.debug(f"Race condition tests skipped: {e}")
+
+        try:
+            from modules.api.api_tester import test_api_endpoints
+            api_urls = [u for u in (crawl_data.get('crawler', {}).get('urls', []) if crawl_data else []) if '/api/' in u or '/v1/' in u or '/v2/' in u or '/graphql' in u]
+            if api_urls:
+                logger.info(f"Testing {len(api_urls)} API endpoints...")
+                api_results = test_api_endpoints(api_urls[:20], workspace)
+                if api_results:
+                    state.save_phase_data('api_testing', api_results)
+        except Exception as e:
+            logger.debug(f"API tests skipped: {e}")
+
         # Phase 7: Exploitation (skip if --skip-exploit)
         if not getattr(args, 'skip_exploit', False):
             print_phase_header(7, "Exploitation & PoC Generation")
@@ -710,6 +774,14 @@ async def run_scan(args, config: dict) -> None:
             if args.resume and exploit_data and (exploit_data.get('chains') or exploit_data.get('pocs')):
                 logger.info("Resuming Phase 7: Loaded data from state.")
             else:
+                # Interactive: let user choose which chains to generate PoCs for
+                if interactive:
+                    poc_choice = get_user_choice(
+                        "Exploitation & PoC generation:",
+                        ['Automatic (all critical findings)', 'Review findings first then select', 'Skip PoC generation'],
+                        default=1
+                    )
+                    logger.info(f"PoC mode: {poc_choice}")
                 exploit_data = await phase_exploitation(target, workspace, config,
                                                         state, ai, vuln_data)
                 state.save_phase_data('exploit_results', exploit_data)
@@ -824,6 +896,10 @@ Examples:
     # AI
     parser.add_argument('--ai-mode', choices=['auto', 'smart', 'light', 'off'],
                         help='Override AI mode')
+
+    # Interactive
+    parser.add_argument('--interactive', '-i', action='store_true',
+                        help='Enable interactive mode (prompts at key phases)')
 
     # Output
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')

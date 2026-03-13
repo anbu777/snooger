@@ -1,26 +1,43 @@
 """
-AI Engine v3.0 — Multi-provider AI with auto-fallback.
-Providers: Ollama (free local), Groq (free cloud), DeepSeek (free tier).
+AI Engine v4.0 — Multi-provider AI with interactive selection, credit monitoring, and auto-fallback.
+Providers: Ollama (free local), Groq (free cloud), DeepSeek (free cloud), OpenRouter (free tier).
 """
 import json
 import logging
+import time
 import requests
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 
 logger = logging.getLogger('snooger')
 
 LIGHT_TASKS = {'classify', 'short_summary', 'wordlist_suggestion', 'triage', 'priority'}
 
+# ─── Provider Definitions ─────────────────────────────────────────────
+PROVIDER_INFO = {
+    'ollama': {'name': 'Ollama (Local)', 'type': 'local', 'emoji': '🖥️'},
+    'groq': {'name': 'Groq Cloud', 'type': 'cloud', 'emoji': '⚡'},
+    'deepseek': {'name': 'DeepSeek', 'type': 'cloud', 'emoji': '🧠'},
+    'openrouter': {'name': 'OpenRouter', 'type': 'cloud', 'emoji': '🌐'},
+}
+
 
 class AIEngine:
-    """Multi-provider AI engine with auto-fallback chain."""
+    """Multi-provider AI engine with interactive selection and auto-fallback."""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, interactive: bool = False):
         self.config = config
         self.mode = config['ai']['mode']
         self.primary = config['ai'].get('primary_provider', 'ollama')
-        self.providers = self.config.get('providers', ['deepseek', 'groq'])
+        self.fallback_chain = config['ai'].get('fallback_chain', ['groq', 'deepseek', 'openrouter'])
         self._providers = self._init_providers()
+        self._exhausted: set = set()  # Providers that hit rate limit
+        self._call_counts: Dict[str, int] = {p: 0 for p in self._providers}
+        self._last_error: Dict[str, str] = {}
+
+        if interactive and self._providers:
+            self._interactive_select()
+
+    # ─── Provider Initialization ──────────────────────────────────────
 
     def _init_providers(self) -> dict:
         """Initialize available providers."""
@@ -37,10 +54,10 @@ class AIEngine:
                 'timeout': ollama_cfg.get('timeout', 120),
             }
 
-        # Groq (free tier: 14,400 tokens/min on llama3-8b-8192)
+        # Groq
         groq_cfg = ai_cfg.get('groq', {})
         groq_key = groq_cfg.get('api_key', '')
-        if groq_key and not groq_key.startswith('${') and not groq_key.endswith('}'):
+        if groq_key and not groq_key.startswith('${'):
             providers['groq'] = {
                 'api_key': groq_key,
                 'model': groq_cfg.get('model', 'llama3-8b-8192'),
@@ -48,10 +65,10 @@ class AIEngine:
                 'timeout': groq_cfg.get('timeout', 30),
             }
 
-        # DeepSeek (free tier available)
+        # DeepSeek
         ds_cfg = ai_cfg.get('deepseek', {})
         ds_key = ds_cfg.get('api_key', '')
-        if ds_key and not ds_key.startswith('${') and not ds_key.endswith('}'):
+        if ds_key and not ds_key.startswith('${'):
             providers['deepseek'] = {
                 'api_key': ds_key,
                 'model': ds_cfg.get('model', 'deepseek-chat'),
@@ -59,32 +76,186 @@ class AIEngine:
                 'timeout': ds_cfg.get('timeout', 60),
             }
 
+        # OpenRouter (free tier)
+        or_cfg = ai_cfg.get('openrouter', {})
+        or_key = or_cfg.get('api_key', '')
+        if or_key and not or_key.startswith('${'):
+            providers['openrouter'] = {
+                'api_key': or_key,
+                'model': or_cfg.get('model', 'meta-llama/llama-3-8b-instruct:free'),
+                'max_tokens': or_cfg.get('max_tokens', 4096),
+                'timeout': or_cfg.get('timeout', 60),
+            }
+
         return providers
+
+    # ─── Interactive Selection & Credit Status ────────────────────────
+
+    def _interactive_select(self) -> None:
+        """Interactive AI provider selection with credit status bar."""
+        try:
+            from rich.console import Console
+            from rich.table import Table
+            from rich.prompt import IntPrompt
+            from rich.panel import Panel
+            console = Console()
+        except ImportError:
+            # Fallback to basic text selection
+            self._interactive_select_basic()
+            return
+
+        # Build status table
+        table = Table(
+            title="🤖 AI Provider Status",
+            show_header=True, header_style="bold cyan",
+            border_style="dim"
+        )
+        table.add_column("#", style="bold white", width=3)
+        table.add_column("Provider", style="white")
+        table.add_column("Status", width=14)
+        table.add_column("Model", style="dim")
+        table.add_column("Credit", width=30)
+
+        available = []
+        for i, (key, info) in enumerate(PROVIDER_INFO.items(), 1):
+            if key in self._providers:
+                status = "[bold green]✅ Ready[/bold green]"
+                model = self._get_model_name(key)
+                credit = self._get_credit_bar(key)
+                available.append(key)
+            else:
+                status = "[red]❌ No Key[/red]"
+                model = "—"
+                credit = "[dim]Not configured[/dim]"
+            table.add_row(str(i), f"{info['emoji']} {info['name']}", status, model, credit)
+
+        console.print(Panel(table, border_style="cyan"))
+
+        if not available:
+            console.print("[yellow]⚠️  No AI providers available. Running without AI.[/yellow]")
+            self.mode = 'off'
+            return
+
+        # Ask user to choose
+        console.print(f"\n[bold cyan]Select primary AI provider:[/bold cyan]")
+        for i, key in enumerate(available, 1):
+            info = PROVIDER_INFO[key]
+            default_mark = " [dim](current)[/dim]" if key == self.primary else ""
+            console.print(f"  [bold white][{i}][/bold white] {info['emoji']} {info['name']}{default_mark}")
+
+        try:
+            choice = IntPrompt.ask(
+                f"[yellow]Choice [1-{len(available)}][/yellow]",
+                default=1
+            )
+            idx = max(0, min(choice - 1, len(available) - 1))
+            self.primary = available[idx]
+            self.fallback_chain = [p for p in available if p != self.primary]
+            console.print(f"\n[green]✅ Primary: {PROVIDER_INFO[self.primary]['name']}[/green]")
+            if self.fallback_chain:
+                names = ', '.join(PROVIDER_INFO[p]['name'] for p in self.fallback_chain)
+                console.print(f"[dim]   Fallback: {names}[/dim]")
+        except (KeyboardInterrupt, EOFError):
+            pass
+
+    def _interactive_select_basic(self) -> None:
+        """Basic text fallback for interactive selection."""
+        available = list(self._providers.keys())
+        if not available:
+            print("[!] No AI providers available.")
+            self.mode = 'off'
+            return
+
+        print("\n=== AI Provider Selection ===")
+        for i, key in enumerate(available, 1):
+            print(f"  [{i}] {PROVIDER_INFO.get(key, {}).get('name', key)}")
+
+        try:
+            raw = input(f"Choice [1-{len(available)}] (default: 1): ").strip()
+            idx = int(raw) - 1 if raw else 0
+            idx = max(0, min(idx, len(available) - 1))
+            self.primary = available[idx]
+            self.fallback_chain = [p for p in available if p != self.primary]
+        except (ValueError, KeyboardInterrupt, EOFError):
+            pass
+
+    def _get_model_name(self, provider: str) -> str:
+        """Get model name for a provider."""
+        cfg = self._providers.get(provider, {})
+        if provider == 'ollama':
+            return cfg.get('model_smart', 'llama3.2')
+        return cfg.get('model', 'unknown')
+
+    def _get_credit_bar(self, provider: str) -> str:
+        """Generate a Rich-formatted credit usage bar."""
+        if provider == 'ollama':
+            return "[green]████████████████████ ∞ Local[/green]"
+
+        # Try to check rate limit info from cached calls
+        calls = self._call_counts.get(provider, 0)
+        if provider in self._exhausted:
+            return "[red]████████████████████ EXHAUSTED[/red]"
+
+        # Estimated limits
+        limits = {'groq': 30, 'deepseek': 50, 'openrouter': 20}
+        limit = limits.get(provider, 50)
+        remaining = max(0, limit - calls)
+        pct = remaining / limit
+        filled = int(pct * 20)
+        bar = "█" * filled + "░" * (20 - filled)
+
+        if pct > 0.5:
+            color = "green"
+        elif pct > 0.2:
+            color = "yellow"
+        else:
+            color = "red"
+
+        return f"[{color}]{bar} ~{remaining}/{limit} calls[/{color}]"
+
+    def check_all_credits(self) -> Dict[str, dict]:
+        """Check credit status for all providers. Returns dict of provider -> status."""
+        status = {}
+        for provider in self._providers:
+            exhausted = provider in self._exhausted
+            calls = self._call_counts.get(provider, 0)
+            status[provider] = {
+                'available': not exhausted,
+                'calls_made': calls,
+                'last_error': self._last_error.get(provider, ''),
+            }
+        return status
+
+    # ─── Core Ask Methods ─────────────────────────────────────────────
 
     def ask(self, prompt: str, task_type: str = 'general',
             system: Optional[str] = None, json_mode: bool = False) -> Optional[str]:
-        """
-        Ask AI with auto-fallback across providers.
-        Tries primary → fallback chain until one succeeds.
-        """
+        """Ask AI with auto-fallback. Skips exhausted providers."""
         if self.mode == 'off':
             return None
 
-        # Build provider order: primary first, then fallback chain
         order = [self.primary] + [p for p in self.fallback_chain if p != self.primary]
 
         for provider in order:
-            if provider not in self._providers:
+            if provider not in self._providers or provider in self._exhausted:
                 continue
             try:
                 result = self._ask_provider(provider, prompt, task_type, system)
                 if result:
+                    self._call_counts[provider] = self._call_counts.get(provider, 0) + 1
                     return result
             except Exception as e:
-                logger.debug(f"AI provider '{provider}' failed: {e}")
+                error_str = str(e)
+                self._last_error[provider] = error_str
+                # Detect rate limit / quota exhaustion
+                if '429' in error_str or 'quota' in error_str.lower() or 'rate' in error_str.lower():
+                    self._exhausted.add(provider)
+                    logger.warning(f"AI provider '{provider}' credit exhausted. Switching to next.")
+                else:
+                    logger.warning(f"AI provider '{provider}' failed: {e}")
                 continue
 
-        logger.warning("All AI providers failed")
+        logger.warning("All AI providers failed or exhausted")
         return None
 
     def _ask_provider(self, provider: str, prompt: str,
@@ -95,6 +266,8 @@ class AIEngine:
             return self._ask_groq(prompt, system)
         elif provider == 'deepseek':
             return self._ask_deepseek(prompt, system)
+        elif provider == 'openrouter':
+            return self._ask_openrouter(prompt, system)
         return None
 
     def _select_ollama_model(self, task_type: str) -> str:
@@ -135,7 +308,7 @@ class AIEngine:
             return None
 
     def _ask_groq(self, prompt: str, system: Optional[str] = None) -> Optional[str]:
-        """Groq API — free tier with generous limits."""
+        """Groq API — free tier."""
         cfg = self._providers.get('groq')
         if not cfg or not cfg.get('api_key'):
             return None
@@ -159,13 +332,14 @@ class AIEngine:
                 },
                 timeout=cfg['timeout']
             )
+            if resp.status_code == 429:
+                raise Exception("429 Rate limit exceeded")
             if resp.status_code == 200:
                 return resp.json()['choices'][0]['message']['content'].strip()
             logger.debug(f"Groq HTTP {resp.status_code}: {resp.text[:200]}")
             return None
         except Exception as e:
-            logger.debug(f"Groq error: {e}")
-            return None
+            raise  # Re-raise for fallback handling
 
     def _ask_deepseek(self, prompt: str, system: Optional[str] = None) -> Optional[str]:
         cfg = self._providers.get('deepseek')
@@ -191,13 +365,52 @@ class AIEngine:
                 },
                 timeout=cfg['timeout']
             )
+            if resp.status_code == 429:
+                raise Exception("429 Rate limit exceeded")
             if resp.status_code == 200:
                 return resp.json()['choices'][0]['message']['content'].strip()
             logger.debug(f"DeepSeek HTTP {resp.status_code}")
             return None
         except Exception as e:
-            logger.debug(f"DeepSeek error: {e}")
+            raise
+
+    def _ask_openrouter(self, prompt: str, system: Optional[str] = None) -> Optional[str]:
+        """OpenRouter API — free tier with many models."""
+        cfg = self._providers.get('openrouter')
+        if not cfg or not cfg.get('api_key'):
             return None
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        try:
+            resp = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://github.com/snooger",
+                    "X-Title": "Snooger Pentest",
+                },
+                json={
+                    "model": cfg['model'],
+                    "messages": messages,
+                    "temperature": 0.3,
+                    "max_tokens": cfg['max_tokens'],
+                    "stream": False,
+                },
+                timeout=cfg['timeout']
+            )
+            if resp.status_code == 429:
+                raise Exception("429 Rate limit exceeded")
+            if resp.status_code == 200:
+                data = resp.json()
+                if 'choices' in data and data['choices']:
+                    return data['choices'][0]['message']['content'].strip()
+            logger.debug(f"OpenRouter HTTP {resp.status_code}")
+            return None
+        except Exception as e:
+            raise
 
     # ─── AI-Powered Security Functions ─────────────────────────────
 
@@ -225,7 +438,7 @@ class AIEngine:
         vuln_text = json.dumps([{
             'name': v.get('info', {}).get('name', v.get('type', 'Unknown')),
             'severity': v.get('info', {}).get('severity', v.get('severity', 'unknown')),
-            'url': v.get('matched-at', v.get('url', v.get('host', '')))[:100],
+            'url': str(v.get('matched-at', v.get('url', v.get('host', ''))))[:100],
             'tags': v.get('info', {}).get('tags', []),
         } for v in vulns[:30]], indent=2)
 
@@ -281,11 +494,11 @@ Respond with JSON: {{"verdict": "true_positive|false_positive|uncertain", "confi
         """AI-powered exploit chain detection."""
         if self.mode == 'off' or not findings:
             return []
-        
+
         vuln_text = json.dumps([{
             'type': f.get('type', 'unknown'),
-            'url': f.get('url', '')[:100],
-            'info': f.get('evidence', '')[:200]
+            'url': str(f.get('url', ''))[:100],
+            'info': str(f.get('evidence', ''))[:200]
         } for f in findings], indent=2)
 
         prompt = f"""You are a master red teamer. Analyze these security findings and identify potential "Exploit Chains".

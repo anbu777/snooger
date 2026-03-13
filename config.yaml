@@ -41,28 +41,29 @@ tools:
   jq: "jq"
 
 ai:
-  mode: "auto"  # List of primary and fallback providers, in order of preference.
-  # Available: deepseek, groq, openai, anthropic, gemini, ollama
-  providers: ["deepseek", "groq"]  # try in order if primary fails
+  mode: "auto"  # auto | smart | light | off
+  primary_provider: "deepseek"
+  fallback_chain: ["groq", "openrouter", "ollama"]
   ollama:
     model_smart: "llama3.2"
     model_light: "tinyllama"
     host: "http://localhost:11434"
     timeout: 120
   groq:
-    api_key: "ENV:GROQ_API_KEY" # Reads from environment variable
-    model: "llama3-70b-8192"
-    system_prompt: |
-      You are an elite autonomous penetration tester and expert bug hunter.
-      Provide highly accurate, actionable, and safe analysis. Focus on real impact.
+    api_key: "${GROQ_API_KEY}"
+    model: "llama3-8b-8192"
+    max_tokens: 4096
     timeout: 30
   deepseek:
-    api_key: "ENV:DEEPSEEK_API_KEY" # Reads from environment variable
-    model: "deepseek-coder"
-    system_prompt: |
-      You are an elite autonomous penetration tester and expert bug hunter.
-      Provide highly accurate, actionable, and safe analysis. Focus on real impact.
-    timeout: 30
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: "deepseek-chat"
+    max_tokens: 2000
+    timeout: 60
+  openrouter:
+    api_key: "${OPENROUTER_API_KEY}"
+    model: "meta-llama/llama-3-8b-instruct:free"
+    max_tokens: 4096
+    timeout: 60
 
 rate_limit:
   requests_per_second: 10
