@@ -16,14 +16,21 @@ class TestRateLimiter(unittest.TestCase):
     def test_adaptive_penalty(self):
         rl = RateLimiter(requests_per_second=100, adaptive=True)
         rl.penalize('slowsite.com', 5.0)
-        self.assertGreater(rl._penalty['slowsite.com'], 0)
+        state = rl._domain_state.get('slowsite.com', {})
+        self.assertGreater(state.get('penalty', 0), 0)
 
     def test_penalty_reset(self):
         rl = RateLimiter(requests_per_second=100, adaptive=True)
         rl.penalize('site.com', 5.0)
-        initial_penalty = rl._penalty['site.com']
+        initial_penalty = rl._domain_state['site.com']['penalty']
         rl.reset_penalty('site.com')
-        self.assertLess(rl._penalty['site.com'], initial_penalty)
+        self.assertLess(rl._domain_state['site.com']['penalty'], initial_penalty)
+
+    def test_get_stats(self):
+        rl = RateLimiter(requests_per_second=10)
+        rl.wait('stats.com')
+        stats = rl.get_stats()
+        self.assertIn('stats.com', stats)
 
 if __name__ == '__main__':
     unittest.main()

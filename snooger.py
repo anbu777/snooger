@@ -101,9 +101,9 @@ async def phase_recon(target: str, workspace: str, config: dict,
 
     # Historical URLs (orphaned module integration)
     try:
-        from modules.reconnaissance.historical_urls import fetch_historical_urls
+        from modules.reconnaissance.historical_urls import get_all_historical_urls
         logger.info("Fetching historical URLs...")
-        hist_urls = fetch_historical_urls(target, workspace)
+        hist_urls = get_all_historical_urls(target, workspace)
         results['historical_urls'] = hist_urls
         state.save_phase_data('historical_urls', hist_urls)
     except Exception as e:
@@ -111,11 +111,11 @@ async def phase_recon(target: str, workspace: str, config: dict,
 
     # Subdomain takeover check (orphaned module integration)
     try:
-        from modules.reconnaissance.subdomain_takeover import check_takeover
+        from modules.reconnaissance.subdomain_takeover import check_subdomain_takeovers
         alive_subs = subdomains if isinstance(subdomains, list) else subdomains.get('alive_subdomains', [])
         if alive_subs:
             logger.info(f"Checking {len(alive_subs)} subdomains for takeover...")
-            takeover_results = check_takeover(alive_subs[:50], workspace)
+            takeover_results = check_subdomain_takeovers(alive_subs[:50], workspace)
             results['subdomain_takeover'] = takeover_results
             state.save_phase_data('subdomain_takeover', takeover_results)
     except Exception as e:
@@ -123,10 +123,10 @@ async def phase_recon(target: str, workspace: str, config: dict,
 
     # Info disclosure check (orphaned module integration)
     try:
-        from modules.reconnaissance.info_disclosure import scan_info_disclosure
+        from modules.reconnaissance.info_disclosure import run_info_disclosure_tests
         target_url = f"https://{target}" if not target.startswith('http') else target
         logger.info("Scanning for information disclosure...")
-        info_disc = scan_info_disclosure(target_url, workspace)
+        info_disc = run_info_disclosure_tests([target_url], workspace)
         results['info_disclosure'] = info_disc
         state.save_phase_data('info_disclosure', info_disc)
     except Exception as e:
@@ -286,19 +286,61 @@ async def phase_vuln_analysis(target: str, workspace: str, config: dict,
                 event_name = 'critical_alert' if severity == 'critical' else 'finding_discovered'
                 emit(event_name, finding, source=vuln_type)
 
-    # Custom SQL Injection Testing
-    if urls_with_params:
-        logger.info(f"Running custom SQL injection tests on {len(urls_with_params)} URLs...")
+    # Custom SQL Injection Testing (GET params + POST forms)
+    if urls_with_params or forms:
+        test_count = len(urls_with_params) + len([f for f in forms if f.get('method', '').upper() == 'POST'])
+        logger.info(f"Running custom SQL injection tests on {test_count} targets...")
         try:
-            sqli_results = run_sqli_tests(urls_with_params, workspace, auth=None, ai=ai)
+            sqli_results = run_sqli_tests(
+                urls_with_params, workspace, auth=None, ai=ai,
+                forms=forms
+            )
             results['sqli'] = sqli_results
             state.save_phase_data('sqli', sqli_results)
+
+            # Count findings from custom tester
+            sqli_findings_count = sum(len(v) for v in sqli_results.values() if isinstance(v, list))
+
+            # Proactive SQLMap scan on parameterized URLs (ALWAYS, not just on confirmed)
+            if urls_with_params:
+                logger.info(f"Running SQLMap on {min(len(urls_with_params), 10)} parameterized URLs...")
+                try:
+                    from modules.exploitation.sqlmap_wrapper import run_sqlmap_batch
+                    sqlmap_results = run_sqlmap_batch(
+                        urls_with_params, workspace,
+                        level=3, risk=2,
+                        max_urls=10,
+                        forms=forms[:5] if forms else None
+                    )
+                    results['sqlmap'] = sqlmap_results
+                    state.save_phase_data('sqlmap', sqlmap_results)
+                    sqlmap_vuln = sum(1 for r in sqlmap_results if r.get('vulnerable'))
+                    if sqlmap_vuln > 0:
+                        logger.warning(f"SQLMap confirmed {sqlmap_vuln} SQL injection(s)!")
+                        for r in sqlmap_results:
+                            if r.get('vulnerable'):
+                                state.add_finding({
+                                    'type': 'sql_injection',
+                                    'subtype': 'sqlmap_confirmed',
+                                    'url': r.get('url', ''),
+                                    'severity': 'critical',
+                                    'confidence': 99,
+                                    'databases': r.get('databases', []),
+                                    'evidence': f"SQLMap confirmed SQLi. DBs: {r.get('databases', [])}",
+                                }, source='sqlmap')
+                except Exception as sqlmap_err:
+                    logger.warning(f"SQLMap batch error: {sqlmap_err}")
+
+            if sqli_findings_count > 0:
+                logger.warning(f"Custom SQLi tester found {sqli_findings_count} injection points")
+
         except Exception as e:
             logger.error(f"SQLi testing error: {e}")
 
     # Custom XSS Testing
-    if urls_with_params:
-        logger.info(f"Running custom XSS tests on {len(urls_with_params)} URLs...")
+    if urls_with_params or forms:
+        xss_count = len(urls_with_params) + len(forms)
+        logger.info(f"Running custom XSS tests on {xss_count} targets...")
         try:
             xss_results = run_xss_tests(
                 urls_with_params, workspace, auth=None,
@@ -378,11 +420,11 @@ async def phase_auth_testing(target: str, workspace: str, config: dict,
             jwt_token = auth_hdr.split('Bearer ')[1].strip()
             break
 
-    from modules.authentication.auth_tester import run_auth_tests
+    # Run auth tests using the correct module (already imported at top)
     auth_results = run_auth_tests(
         target_url, workspace,
         crawler_results=crawl_data.get('crawler', {}),
-        login_url=None,
+        login_url=login_url,
         jwt_token=jwt_token
     )
     state.save_phase_data('auth_testing', auth_results)
@@ -431,18 +473,24 @@ async def phase_exploitation(target: str, workspace: str, config: dict,
     
     # Dynamic Phase Data Collection — includes all new modules
     sources = ['nuclei', 'active_vulns', 'sqli', 'xss', 'graphql',
-               'smuggling', 'upload', 'idor', 'auth_testing', 'js_analysis']
+               'smuggling', 'upload', 'idor', 'auth_testing', 'js_analysis',
+               'sqlmap', 'race_condition', 'api_testing']
     for phase_name in sources:
         phase_data = state.get_phase_data(phase_name) or {}
         if isinstance(phase_data, dict):
             # Standard finding lists
             for key in ['findings', 'secrets', 'idor', 'jwt_findings', 'oauth_findings',
                         'error_based', 'boolean_blind', 'time_based', 'waf_bypass',
+                        'post_form',
                         'reflected', 'dom_based', 'stored',
                         'introspection', 'injection', 'depth_limit', 'batch_queries',
                         'cl_te', 'te_cl', 'te_te',
                         'extension_bypass', 'content_type_bypass',
-                        'endpoints']:
+                        'endpoints',
+                        'version_bypass', 'api_key_leakage',
+                        'ssrf', 'open_redirect', 'ssti', 'xxe',
+                        'cors', 'host_header', 'crlf', 'http_methods',
+                        'path_traversal', 'nosql']:
                 val = phase_data.get(key)
                 if isinstance(val, list):
                     for f in val:
@@ -517,7 +565,9 @@ async def phase_reporting(target: str, workspace: str, config: dict,
                           state, ai) -> dict:
     """Phase 8: Report Generation."""
     from modules.reporting.json_builder import build_final_report
-    from modules.reporting.ai_summary import generate_summary, generate_markdown_report
+    from modules.reporting.ai_summary import (
+        generate_summary, generate_markdown_report, generate_html_report
+    )
 
     logger = logging.getLogger('snooger')
 
@@ -526,10 +576,14 @@ async def phase_reporting(target: str, workspace: str, config: dict,
 
     logger.info("Generating AI summary and reports...")
     ai_synopsis = generate_summary(ai, report)
-    reports = generate_markdown_report(report, ai_synopsis, workspace)
+
+    # Generate both markdown and HTML reports
+    md_path = generate_markdown_report(report, ai_synopsis, workspace)
+    html_path = generate_html_report(report, ai_synopsis, workspace)
+    report_files = [p for p in [md_path, html_path] if p]
 
     emit('phase_completed', {'phase': 'reporting'}, source='reporting')
-    return {'report': report, 'report_files': reports}
+    return {'report': report, 'report_files': report_files}
 
 
 # ─── Main Orchestrator ────────────────────────────────────────────────
@@ -743,26 +797,34 @@ async def run_scan(args, config: dict) -> None:
         
         phase_results['business'] = biz_data
 
-        # Phase 6b: Race Condition & API Testing (orphaned modules)
+        # Phase 6b: Race Condition & API Testing (integrated modules)
         try:
-            from modules.business_logic.race_condition import test_race_conditions
-            race_urls = crawl_data.get('crawler', {}).get('forms', []) if crawl_data else []
-            if race_urls:
-                logger.info(f"Testing {len(race_urls)} forms for race conditions...")
-                race_results = test_race_conditions(race_urls[:10], workspace)
+            from modules.business_logic.race_condition import run_race_condition_tests
+            crawler_res = crawl_data.get('crawler', {}) if crawl_data else {}
+            hist_urls = recon_data.get('historical_urls', []) if recon_data else []
+            if crawler_res:
+                logger.info("Testing for race conditions...")
+                race_results = run_race_condition_tests(
+                    workspace, auth=None,
+                    crawler_results=crawler_res,
+                    historical_urls=hist_urls if isinstance(hist_urls, list) else []
+                )
                 if race_results:
                     state.save_phase_data('race_condition', race_results)
+                    logger.warning(f"Race condition: {len(race_results)} findings")
         except Exception as e:
             logger.debug(f"Race condition tests skipped: {e}")
 
         try:
-            from modules.api.api_tester import test_api_endpoints
-            api_urls = [u for u in (crawl_data.get('crawler', {}).get('urls', []) if crawl_data else []) if '/api/' in u or '/v1/' in u or '/v2/' in u or '/graphql' in u]
-            if api_urls:
-                logger.info(f"Testing {len(api_urls)} API endpoints...")
-                api_results = test_api_endpoints(api_urls[:20], workspace)
-                if api_results:
-                    state.save_phase_data('api_testing', api_results)
+            from modules.api.api_tester import run_api_tests
+            target_url = f"https://{target}" if not target.startswith('http') else target
+            logger.info("Running API security tests...")
+            api_results = run_api_tests(
+                target_url, workspace, auth=None,
+                crawler_results=crawl_data.get('crawler', {}) if crawl_data else None
+            )
+            if api_results:
+                state.save_phase_data('api_testing', api_results)
         except Exception as e:
             logger.debug(f"API tests skipped: {e}")
 

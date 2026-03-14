@@ -163,11 +163,32 @@ class WebCrawler:
             self.parameters[param].add(url)
 
     def _build_result(self) -> dict:
+        # Build flat list of URLs that have query parameters
+        urls_with_params = [url for url in self.visited
+                            if '?' in url and '=' in url]
+        # Also include all links with params
+        for link in self.links:
+            if '?' in link and '=' in link and link not in urls_with_params:
+                urls_with_params.append(link)
+        # Add form action URLs with parameters appended as query string
+        for form in self.forms:
+            action = form.get('action', '')
+            if action:
+                params_str = '&'.join(
+                    f"{inp['name']}={inp.get('value', 'test')}"
+                    for inp in form.get('inputs', []) if inp.get('name')
+                )
+                if params_str:
+                    form_url = f"{action}?{params_str}"
+                    if form_url not in urls_with_params:
+                        urls_with_params.append(form_url)
+
         return {
             'visited_urls': list(self.visited),
             'all_links': list(self.links),
             'js_files': list(self.js_files),
             'forms': self.forms,
+            'urls_with_params': urls_with_params,
             'api_endpoints': list(self.api_endpoints),
             'parameters': {k: list(v) for k, v in self.parameters.items()},
             'stats': {
@@ -176,6 +197,7 @@ class WebCrawler:
                 'forms_found': len(self.forms),
                 'js_files': len(self.js_files),
                 'api_endpoints': len(self.api_endpoints),
+                'urls_with_params': len(urls_with_params),
             }
         }
 
