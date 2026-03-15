@@ -102,10 +102,12 @@ def generate_custom_wordlist(domain: str, page_content: str, workspace_dir: str)
 
 def check_sensitive_files(base_url: str, workspace_dir: str,
                           cookies_file: Optional[str] = None) -> List[dict]:
-    """Check for exposed sensitive files."""
+    """Check for exposed sensitive files with soft-404 detection."""
     logger.info(f"Checking for sensitive file exposure on {base_url}")
     rl = get_rate_limiter()
     import requests
+    import hashlib
+    import uuid
 
     found = []
     base = base_url.rstrip('/')
@@ -122,35 +124,92 @@ def check_sensitive_files(base_url: str, workspace_dir: str,
         except Exception:
             pass
 
+    # ── Soft-404 Baseline Detection ──────────────────────────────────
+    # Request a random non-existent path to fingerprint the server's
+    # default "not found" page (even if it returns HTTP 200).
+    baseline_hash = None
+    baseline_length = None
+    baseline_lengths = set()  # Track multiple baseline sizes
+    try:
+        for _ in range(2):  # Two random paths for accuracy
+            random_path = f"nonexistent_{uuid.uuid4().hex[:12]}.html"
+            rl.wait(base_url)
+            bl_resp = session.get(f"{base}/{random_path}", timeout=8, allow_redirects=False)
+            if bl_resp.status_code == 200:
+                bl_hash = hashlib.md5(bl_resp.content).hexdigest()
+                bl_len = len(bl_resp.content)
+                if baseline_hash is None:
+                    baseline_hash = bl_hash
+                    baseline_length = bl_len
+                baseline_lengths.add(bl_len)
+                logger.info(f"Soft-404 baseline: status=200, length={bl_len}, hash={bl_hash[:8]}...")
+    except Exception as e:
+        logger.debug(f"Baseline detection error: {e}")
+
+    # Track content lengths to detect bulk false positives
+    length_counter: dict = {}
+
     for path in SENSITIVE_FILES_WORDLIST:
         try:
             rl.wait(base_url)
             url = f"{base}/{path.lstrip('/')}"
             resp = session.get(url, timeout=8, allow_redirects=False)
             if resp.status_code in (200, 403):
+                content_len = len(resp.content)
+                content_hash = hashlib.md5(resp.content).hexdigest()
+
+                # Don't add 403 without content
+                if resp.status_code == 403 and content_len < 100:
+                    continue
+
+                # ── Soft-404 Filter ──────────────────────────────────
+                if resp.status_code == 200 and baseline_hash:
+                    # Skip if content hash matches baseline (identical page)
+                    if content_hash == baseline_hash:
+                        logger.debug(f"  [SOFT-404] {path} — matches baseline hash, skipping")
+                        continue
+                    # Skip if content length matches baseline (same-size generic page)
+                    if content_len in baseline_lengths:
+                        logger.debug(f"  [SOFT-404] {path} — matches baseline length ({content_len}), skipping")
+                        continue
+
+                # Track how many paths return the same content length
+                length_counter[content_len] = length_counter.get(content_len, 0) + 1
+
                 item = {
                     'url': url,
                     'path': path,
                     'status_code': resp.status_code,
-                    'content_length': len(resp.content),
+                    'content_length': content_len,
                     'content_type': resp.headers.get('content-type', ''),
+                    'content_hash': content_hash,
                 }
-                # Don't add 403 without content
-                if resp.status_code == 403 and len(resp.content) < 100:
-                    continue
                 found.append(item)
                 severity = 'high' if resp.status_code == 200 else 'medium'
-                logger.warning(f"  [{resp.status_code}] {path} ({len(resp.content)} bytes) — {severity}")
+                logger.warning(f"  [{resp.status_code}] {path} ({content_len} bytes) — {severity}")
                 if resp.status_code == 200:
                     rl.penalize(base_url, 0.5)  # slow down on hits
         except Exception as e:
             logger.debug(f"Error checking {path}: {e}")
 
+    # ── Post-scan: Remove bulk false positives ───────────────────────
+    # If 4+ paths share the same content length, they're likely all
+    # generic pages (another form of soft-404 not caught by baseline).
+    suspicious_lengths = {l for l, c in length_counter.items() if c >= 4}
+    if suspicious_lengths:
+        before_count = len(found)
+        found = [f for f in found if f['content_length'] not in suspicious_lengths]
+        filtered = before_count - len(found)
+        if filtered > 0:
+            logger.info(f"Filtered {filtered} likely soft-404 results (identical content lengths: {suspicious_lengths})")
+
     if found:
         import json
         with open(os.path.join(workspace_dir, 'sensitive_files.json'), 'w') as f:
             json.dump(found, f, indent=2)
-        logger.info(f"Found {len(found)} sensitive file exposures")
+        logger.info(f"Found {len(found)} verified sensitive file exposures")
+    else:
+        logger.info("No genuine sensitive file exposures found (soft-404s filtered)")
     return found
 
 def discover_content(domain: str, workspace_dir: str,

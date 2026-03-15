@@ -599,11 +599,17 @@ async def run_scan(args, config: dict) -> None:
         config = apply_profile(config, args.profile)
 
     # 1. Determine Workspace
-    if getattr(args, 'resume', None):
-        workspace = args.resume
+    custom_ws = getattr(args, 'workspace', None) or getattr(args, 'resume', None)
+    if custom_ws:
+        workspace = custom_ws
         if not os.path.exists(workspace):
-            logger.error(f"Workspace not found for resume: {workspace}")
-            return
+            logger.warning(f"Workspace not found: {workspace}. Creating new one.")
+            os.makedirs(workspace, exist_ok=True)
+        # Check if we are resuming (folder exists and has state data)
+        if os.path.exists(os.path.join(workspace, 'state.json')) or os.path.exists(os.path.join(workspace, 'snooger.log')):
+            args.resume = True
+        else:
+            args.resume = False
     else:
         domain_name = target.replace('https://', '').replace('http://', '').split('/')[0] if target else "unknown"
         workspace = os.path.join(
@@ -997,8 +1003,9 @@ def main():
         from core.config_loader import _apply_defaults
         config = _apply_defaults({})
 
-    # Override workspace
-    if args.workspace:
+    # Override workspace base dir, but don't overwrite the exact string yet
+    # We leave args.workspace as the raw argument for run_scan to differentiate
+    if args.workspace and not ('_' in args.workspace and '/' in args.workspace):
         config['workspace'] = args.workspace
 
     # Override AI mode
@@ -1022,14 +1029,15 @@ def main():
         return
 
     # Target validation
-    if not args.target and not args.resume:
+    if not getattr(args, 'target', None) and not getattr(args, 'resume', None) and ('_' not in getattr(args, 'workspace', '') ):
         print("[!] Target required. Use -t <domain> or --resume <workspace>")
         return
 
-    # Setup
+    # Setup Logger
     workspace_base = config.get('workspace', 'workspace')
-    os.makedirs(workspace_base, exist_ok=True)
-    logger = setup_logging(workspace_base, args.verbose)
+    log_dir = getattr(args, 'resume', None) or (getattr(args, 'workspace', None) if getattr(args, 'workspace', None) and '_' in getattr(args, 'workspace', '') else workspace_base)
+    os.makedirs(log_dir, exist_ok=True)
+    logger = setup_logging(log_dir, args.verbose)
 
     # Suppress warnings
     import urllib3
